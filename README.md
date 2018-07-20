@@ -10,8 +10,6 @@ Using this dialog allows to render quite complex **frame ranges**, **single fram
 
 For example, you can enter `1, 2, 3, 5-10` to render only those frames. In order to exclude e.g. frame `7` from `1-10` range, just add a *caret* or *exclamation mark* followed by the number, like `^7` to render frame `1-6, 8-10` (similar when specifying multiple ranges on the command line).
 
-You can also render **every nth frame** of an animation by just adding `x` followed by any number after the range, which allows to indicate *incrementation steps*. For example, `1-10x2` renders every second frame of the given range `1, 3, 5, 7, 9`. This way, you can render **subframes** by indicating a float value like `x0.1` or even `x0.01` to get slow motion.
-
 ### Examples
 
 | Input (Range)          | Output (Frames)                                        | 
@@ -29,11 +27,16 @@ You can also render **every nth frame** of an animation by just adding `x` follo
 | 1-2x0.1                | 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0  |
 | 1-2x0.1 ^1.4, 1.5      | 1.0, 1.1, 1.2, 1.3, 1.6, 1.7, 1.8, 1.9, 2.0            |
 
+You can also render **every nth frame** of the scene by adding `x` followed by any number after the range, which allows to indicate *incrementation steps*. For example, `1-10x2` renders every second frame of the given range `1, 3, 5, 7, 9`. This way, you can render **subframes** by indicating a float value like `x0.1` or even `x0.01` to get slow motion.
+
+![SlowMo](https://i.stack.imgur.com/wOCMZ.gif)  
+`1-17x0.25` @25fps *(without motion blur)*
+
 ### Options
 
  - You can **verify the output** before rendering the animation by clicking the *Verify Output* operator ![I1](https://i.stack.imgur.com/JovW0.jpg), which reports all frames that are going to be rendered (in the *Info Area* as well as in the terminal)
  - You can enable *Filtering* ![I1](https://i.stack.imgur.com/lKqJq.jpg) to handle each number after the caret (`^`) separatly, this allows to **add single frames** or frame ranges **right after any excluded frame**, e.g. `1-10 23 ^3-7 4 6` renders `1, 2, 4, 6, 8, 9, 10, 23` instead of `1, 2, 8, 9, 10, 23` if the property is disabled
- - You can **render specific keyframes** by selecting the keys in the *Dope Sheet* or the *Graph Editor* and calling *Render Selected Keyframes* operator via <kbd>space bar</kbd>, which automatically adds the frames to the render list:
+ - You can **render specific keyframes** by selecting the keys in the *Dope Sheet* or the *Graph Editor* and calling *Render Selected Keyframes* operator via <kbd>spacebar</kbd>, which automatically adds the frames to the render list:
  
    ![Render Selected Keyframes](https://i.stack.imgur.com/PUs71.jpg)
  
@@ -46,8 +49,8 @@ If [FFmpeg](https://www.ffmpeg.org/) is installed on your machine and set up pro
 ### Options
  - Select `ProRes 4444 XQ` to get an **alpha channel**
  - You can **verify the image sequence** on disk before encoding by clicking the *Verify Image Sequence* operator ![I1](https://i.stack.imgur.com/JovW0.jpg), which also detects all frames missing frames of the sequence
- - In case there are **missing frames**, the addon either provides an utility function to fill the gaps of the sequence by copying the last rendered frame as long as the next rendered frame is reached or another operator to render all missing frames:
-    
+ - In case there are **missing frames**, the addon either provides an utility function to fill the gaps of the image sequence with copies of the nearest frame to get the full lenght animation and another operator to render all missing frames:
+ 
    ![Encode Image Sequence Dialog](https://i.stack.imgur.com/ul9ld.jpg)
  
 
