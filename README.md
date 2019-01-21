@@ -18,7 +18,7 @@ For example, you can enter `1, 2, 3, 5-10` to render only those frames. In order
 | 1-5, 10-15             | 1, 2, 3, 5, 10, 11, 12, 13, 14, 15                     |
 | 1-10 ^7                | 1, 2, 3, 4, 6, 8, 9, 10                                |
 | 1-10 ^3,4              | 1, 2, 5, 6, 8, 9, 10                                   |
-| 1-10 ^3-5              | 1, 2, 5, 6, 8, 9, 10                                   |
+| 1-10 ^3-5              | 1, 2, 6, 8, 9, 10                                   |
 | 1-10 ^3-5, 9           | 1, 2, 6, 8, 10                                         |
 | 1-10 23-29 ^3-5, 7-9   | 1, 2, 5, 6, 10, 23, 24, 25, 26, 27, 28, 29             |
 | 1-10x2                 | 1, 3, 5, 7, 9                                          |
@@ -87,7 +87,7 @@ The available settings are slightly different per operating system. However, you
 
 ## Gotchas and Limitations
 
- - Activation of the *Playblast* operator hotkey requires restarting blender
+ - Activation of the *Playblast* hotkey requires restarting blender
  - In case encoding fails for some reason, make sure the path to ffmpeg binary is [absolute](https://en.wikipedia.org/wiki/Path_(computing))
   - Renewal of hotkeys *once entirely removed*, requires resetting the *Addon-Preferences* and restarting blender 
  - Switching the terminal back from *Xterm* to the default system terminal requires resetting the *Addon-Preferences* in some cases
