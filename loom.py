@@ -19,6 +19,7 @@
 import bpy
 import re
 import os
+import errno
 import subprocess
 import blend_render_info
 from sys import platform
@@ -28,12 +29,11 @@ from itertools import count, groupby
 import rna_keymap_ui
 import webbrowser
 
-
 bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 2),
+    "version": (0, 3),
     "blender": (2, 80, 0),
     "location": "Render Menu or Render Panel (optional)",
     "warning": "", # used for warning icon and text in addons panel
@@ -780,7 +780,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         try:
             subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError as e:
-            if e.errno == os.errno.ENOENT:
+            if e.errno == errno.ENOENT:
                 return False
         return True
 
@@ -932,6 +932,8 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         col.operator("loom.batch_clear_list", text="Clear List", icon="PANEL_CLOSE")
         
         if any(i.encode_flag for i in lum.batch_render_coll):
+            row = layout.row()
+            row.separator()
             split_perc = 0.3
             row = layout.row()
             split = row.split(factor=split_perc)
@@ -1321,7 +1323,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         description="Frame Rate",
         default=25, min=1)
 
-    missing_frames: bpy.props.BoolProperty(
+    missing_frames_bool: bpy.props.BoolProperty(
         name="Missing Frames",
         description="Missing Frames")
 
@@ -1378,7 +1380,8 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         try:
             subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError as e:
-            if e.errno == os.errno.ENOENT:
+
+            if e.errno == errno.ENOENT:
                 return False
         return True
 
@@ -1493,13 +1496,14 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         mov_filename_noext, mov_extension = os.path.splitext(mov_filename)
         mov_extension = ".mov"
 
+        """ TODO
         mov_num_suff = self.number_suffix(mov_filename_noext)
         if mov_num_suff:
             mov_filename_noext = mov_filename_noext.replace(mov_num_suff, "")
 
         if mov_filename_noext.endswith(("-", "_", ".")):
             mov_filename_noext = mov_filename_noext[:-1]
-
+        """
         mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
         if os.path.isfile(mov_path):
             from time import strftime
@@ -1510,10 +1514,10 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
 
         """ Detect missing frames """
         frame_numbers = sorted(list(image_sequence.keys())) #start_frame, end_frame = fn[0], fn[-1]
-        missing_frames = self.missing_frames(frame_numbers)
+        missing_frame_list = self.missing_frames(frame_numbers)
 
-        if missing_frames:
-            lum.lost_frames = self.rangify_frames(missing_frames)
+        if missing_frame_list:
+            lum.lost_frames = self.rangify_frames(missing_frame_list)
             error = "Missing frames detected: {}".format(lum.lost_frames)
             if not self.options.is_invoke:
                 print ("ERROR: ", error)
@@ -1522,7 +1526,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
                 self.report({'ERROR_INVALID_INPUT'}, error)
                 self.report({'ERROR'},"Frame list copied to clipboard.")
                 context.window_manager.clipboard = "{}".format(
-                    ','.join(map(str, missing_frames)))
+                    ','.join(map(str, missing_frame_list)))
                 bpy.ops.loom.encode_sequence('INVOKE_DEFAULT') # re-invoke the dialog
                 return {"CANCELLED"}
         else:
@@ -1534,6 +1538,11 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         cli_args = ["-start_number", frame_numbers[0], "-apply_trc", self.colorspace, "-i", fp_ffmpeg] 
         cli_args += self.encode_presets[self.codec]
         cli_args += [mov_path] if self.fps == 25 else ["-r", self.fps, mov_path]
+
+        # TODO - PNG support
+        if extension in (".png", ".PNG"):
+            self.report({'WARNING'}, "PNG is not supported")
+            return {"FINISHED"}
 
         """ Run ffmpeg """
         bpy.ops.loom.run_terminal(
@@ -1568,7 +1577,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         layout = self.layout
 
         split_width = .2
-        split = layout.split(split_width)
+        split = layout.split(factor=split_width)
         col = split.column(align=True)
         col.label(text="Sequence:")
         col = split.column(align=True)
@@ -1580,28 +1589,28 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(lum.sequence_encode)
         else:
             sub.operator(LOOM_OT_encode_auto_paths.bl_idname, text="", icon='AUTO') #GHOST #GHOST_ENABLED, SEQUENCE
-        sel_sequence = sub.operator(LOOM_OT_load_image_sequence.bl_idname, text="", icon='FILESEL')
+        sel_sequence = sub.operator(LOOM_OT_load_image_sequence.bl_idname, text="", icon='FILE_TICK')
         sel_sequence.verify_sequence = False
 
-        split = layout.split(split_width)
+        split = layout.split(factor=split_width)
         col = split.column(align=True)
         col.label(text="Colorspace:")
         col = split.column(align=True)
         col.prop(self, "colorspace", text="")
 
-        split = layout.split(split_width)
+        split = layout.split(factor=split_width)
         col = split.column(align=True)
         col.label(text="Frame Rate:")
         col = split.column(align=True)
         col.prop(self, "fps", text="")
 
-        split = layout.split(split_width)
+        split = layout.split(factor=split_width)
         col = split.column(align=True)
         col.label(text="Codec:")
         col = split.column(align=True)
         col.prop(self, "codec", text="")
 
-        split = layout.split(split_width)
+        split = layout.split(factor=split_width)
         col = split.column(align=True)
         col.label(text="Movie File:")
         col = split.column(align=True)
@@ -1610,7 +1619,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         if lum.movie_path:
             sub.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(lum.movie_path)
-        sub.operator(LOOM_OT_encode_select_movie.bl_idname, text="", icon='FILESEL')
+        sub.operator(LOOM_OT_encode_select_movie.bl_idname, text="", icon='FILE_TICK')
         
         if lum.lost_frames:
             row = layout.row()
@@ -1675,7 +1684,7 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
 
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
-        win.cursor_warp(x=self.cursor_pos[0]-100, y=self.cursor_pos[1]+70)
+        win.cursor_warp(x=self.cursor_pos[0]-200, y=self.cursor_pos[1]+200) # x-100 y-+70
         bpy.ops.loom.encode_sequence('INVOKE_DEFAULT') # re-invoke the dialog
         
     @classmethod
@@ -1715,13 +1724,13 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
 
             """ Detect missing frames """  #start_frame, end_frame = fn[0], fn[-1]
             frame_numbers = sorted(list(image_sequence.keys()))
-            missing_frames = self.missing_frames(frame_numbers)
+            missing_frame_list = self.missing_frames(frame_numbers)
 
-            if missing_frames:
-                lum.lost_frames = self.rangify_frames(missing_frames)
+            if missing_frame_list:
+                lum.lost_frames = self.rangify_frames(missing_frame_list)
                 context.window_manager.clipboard = "{}".format(
-                    ','.join(map(str, missing_frames)))
-                error_massage = "Missing frames detected: {}".format(self.rangify_frames(missing_frames))
+                    ','.join(map(str, missing_frame_list)))
+                error_massage = "Missing frames detected: {}".format(self.rangify_frames(missing_frame_list))
                 self.report({'ERROR_INVALID_INPUT'}, error_massage)
                 self.report({'ERROR'},"Frame list copied to clipboard.")
             else:
@@ -1779,7 +1788,7 @@ class LOOM_OT_encode_select_movie(bpy.types.Operator, ImportHelper):
 
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
-        win.cursor_warp(x=self.cursor_pos[0]-100, y=self.cursor_pos[1]+70)
+        win.cursor_warp(x=self.cursor_pos[0]-200, y=self.cursor_pos[1]+200)
         bpy.ops.loom.encode_sequence('INVOKE_DEFAULT') # re-invoke the dialog
         
     @classmethod
@@ -1872,13 +1881,13 @@ class LOOM_OT_encode_verify_image_sequence(bpy.types.Operator):
 
         """ Detect missing frames """
         frame_numbers = sorted(list(image_sequence.keys()))
-        missing_frames = self.missing_frames(frame_numbers)
+        missing_frame_list = self.missing_frames(frame_numbers)
 
-        if missing_frames:
-            lum.lost_frames = self.rangify_frames(missing_frames)
+        if missing_frame_list:
+            lum.lost_frames = self.rangify_frames(missing_frame_list)
             context.window_manager.clipboard = "{}".format(
-                ','.join(map(str, missing_frames)))
-            error_massage = "Missing frames detected: {}".format(self.rangify_frames(missing_frames))
+                ','.join(map(str, missing_frame_list)))
+            error_massage = "Missing frames detected: {}".format(self.rangify_frames(missing_frame_list))
             self.report({'ERROR'}, error_massage)
             self.report({'ERROR'},"Frame list copied to clipboard.")
         else:
@@ -1962,10 +1971,10 @@ class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
 
         """ Detect missing frames """
         frame_numbers = sorted(list(image_sequence.keys())) #start_frame, end_frame = fn[0], fn[-1]
-        missing_frames = self.missing_frames(frame_numbers)
+        missing_frame_list = self.missing_frames(frame_numbers)
 
         """ Copy images """
-        if missing_frames:
+        if missing_frame_list:
             frames_to_copy = {}
             f_prev = frame_numbers[0]
             for f in range(frame_numbers[0], frame_numbers[-1]+1):
@@ -2471,10 +2480,10 @@ class LOOM_OT_playblast(bpy.types.Operator):
         start_frame_format = start_frame_path.replace(start_frame_suff,'#'*len(start_frame_suff))
 
         """ Detect missing frames """
-        missing_frames = self.missing_frames(frames)
-        if missing_frames:
-            end_frame = missing_frames[0]-1
-            self.report({'WARNING'}, "Missing Frames: {}".format(', '.join(map(str, missing_frames))))
+        missing_frame_list = self.missing_frames(frames)
+        if missing_frame_list:
+            end_frame = missing_frame_list[0]-1
+            self.report({'WARNING'}, "Missing Frames: {}".format(', '.join(map(str, missing_frame_list))))
             
         if not prefs.user_player:
             """ Assemble arguments and run the command """
@@ -2543,7 +2552,7 @@ class LOOM_OT_verify_terminal(bpy.types.Operator):
         try:
             subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except OSError as e:
-            if e.errno == os.errno.ENOENT:
+            if e.errno == errno.ENOENT:
                 return False
         return True
 
