@@ -515,15 +515,17 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         #sub.prop(lum, "filter_keyframes", icon='SPACE2', icon_only=True)
         sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="") #SEQ_LUMA_WAVEFORM
 
-        split = layout.split(factor=.17)
-        col = split.column(align=True)
-        col.active = not lum.command_line
-        col.label(text="Display:")
-        col = split.column(align=True)
-        sub = col.row(align=True)
-        sub.active = not lum.command_line
-        sub.prop(scn.render, "display_mode", text="")
-        sub.prop(scn.render, "use_lock_interface", icon_only=True)
+        # Display Mode seems gone
+        if getattr(scn.render, "display_mode", None):
+            split = layout.split(factor=.17)
+            col = split.column(align=True)
+            col.active = not lum.command_line
+            col.label(text="Display:")
+            col = split.column(align=True)
+            sub = col.row(align=True)
+            sub.active = not lum.command_line
+            sub.prop(scn.render, "display_mode", text="")
+            sub.prop(scn.render, "use_lock_interface", icon_only=True)
             
         row = layout.row(align=True)    
         row.prop(lum, "command_line", text="Render using Command Line")
@@ -1350,10 +1352,11 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
     # https://avpres.net/FFmpeg/sq_ProRes.html, 
     # https://trac.ffmpeg.org/wiki/Encode/VFX
     encode_presets = {
-        "PRORES422PR" : ["-c:v", "prores", "-profile:v", 0],
-        "PRORES422LT" : ["-c:v", "prores", "-profile:v", 1],
-        "PRORES422" : ["-c:v", "prores", "-profile:v", 2],
-        "PRORES422HQ" : ["-c:v", "prores", "-profile:v", 3],
+        "PRORES422PR" : ["-c:v", "prores_ks", "-profile:v", 0],
+        "PRORES422LT" : ["-c:v", "prores_ks", "-profile:v", 1],
+        #"PRORES422" : ["-c:v", "prores", "-profile:v", 2, "-pix_fmt" "yuv422p10"], #["-c:v", "prores", "-profile:v", 2],
+        "PRORES422" : ["-c:v", "prores_ks", "-profile:v", 2],
+        "PRORES422HQ" : ["-c:v", "prores_ks", "-profile:v", 3],
         "PRORES4444" : ["-c:v", "prores_ks", "-profile:v", 4, "-quant_mat", "hq", "-pix_fmt", "yuva444p10le"],
         "PRORES4444XQ" : ["-c:v", "prores_ks", "-profile:v", 5, "-quant_mat", "hq", "-pix_fmt", "yuva444p10le"],
         "DNXHD422-08-036" : ["-c:v", "dnxhd", "-vf", "scale=1920x1080,fps=25/1,format=yuv422p", "-b:v", "36M"],
@@ -1537,6 +1540,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         fp_ffmpeg = os.path.join(basedir, fn_ffmpeg) # "{}%0{}d{}".format(filename_noext, 4, ext)
         cli_args = ["-start_number", frame_numbers[0], "-apply_trc", self.colorspace, "-i", fp_ffmpeg] 
         cli_args += self.encode_presets[self.codec]
+        #cli_args += ["-f", "image2"]
         cli_args += [mov_path] if self.fps == 25 else ["-r", self.fps, mov_path]
 
         # TODO - PNG support
