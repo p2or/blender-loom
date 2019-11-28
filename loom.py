@@ -2159,15 +2159,15 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
     def poll(cls, context):
         return not context.scene.render.is_movie_format
 
-    def pre_render(self, scene):
+    def pre_render(self, scene, depsgraph):
         self._rendering = True
 
-    def cancel_render(self, scene):
+    def cancel_render(self, scene, depsgraph):
         self._stop = True
         scene.render.filepath = self._output_path       
         self._rendered_frames.pop()
 
-    def post_render(self, scene):
+    def post_render(self, scene, depsgraph):
         #lum.latest_render = scene.render.filepath
         self._frames.pop(0)
         self._rendering = False
