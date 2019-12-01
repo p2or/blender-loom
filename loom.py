@@ -34,7 +34,7 @@ bl_info = {
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
     "version": (0, 3),
-    "blender": (2, 80, 0),
+    "blender": (2, 81, 0),
     "location": "Render Menu or Render Panel (optional)",
     "warning": "", # used for warning icon and text in addons panel
     "wiki_url": "https://github.com/p2or/blender-loom",
@@ -2020,6 +2020,12 @@ class LOOM_OT_open_folder(bpy.types.Operator):
         try:
             if platform.startswith('darwin'):
                 webbrowser.open("file://{}".format(self.folder_path))
+            elif platform.startswith('linux'):
+                try:
+                    #os.system('xdg-open "{}"'.format(self.folder_path))
+                    subprocess.call(["xdg-open", self.folder_path])
+                except:
+                    webbrowser.open(self.folder_path)
             else:
                 webbrowser.open(self.folder_path)
         except OSError:
