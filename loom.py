@@ -33,7 +33,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 3),
+    "version": (0, 4),
     "blender": (2, 81, 0),
     "location": "Render Menu or Render Panel (optional)",
     "warning": "", # used for warning icon and text in addons panel
@@ -579,7 +579,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
 
     def int_filter(self, flt):
         try:
-            return int(flt) if flt.is_integer() else None
+            return int(flt)
         except ValueError:
             return None
 
@@ -610,18 +610,51 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
                     for key in channel.keyframe_points:
                         ctrl_points.add(key.co.x)
         return sorted(ctrl_points)
-    
+
+    def selected_gpencil_frames(self, context):
+        """ Returns all selected grease pencil frames """
+        ctrl_points = set()
+        for o in context.scene.objects:
+            if o.type == 'GPENCIL':
+                for l in o.data.layers:
+                    for f in l.frames:
+                        if f.select:
+                            ctrl_points.add(f.frame_number)
+        return sorted(ctrl_points)
+
     @classmethod
     def poll(cls, context):
-         #context.area.spaces[0].mode in ('DOPESHEET', 'SHAPEKEY', ...)
-        areas = ('DOPESHEET_EDITOR', 'GRAPH_EDITOR', 'TIMELINE')
-        return context.area.type in areas and \
+        editors = ('DOPESHEET_EDITOR', 'GRAPH_EDITOR', 'TIMELINE')
+        return context.space_data.type in editors and \
             not context.scene.render.is_movie_format
 
     def execute(self, context):
-        selected_keys = self.selected_ctrl_points(context) 
+        space = context.space_data #print (space.type)
+
+        selected_keys = None
+        if space.type == 'DOPESHEET_EDITOR':
+            mode = context.space_data.mode
+            
+            if mode == 'GPENCIL':
+                selected_keys = self.selected_gpencil_frames(context)
+                
+            elif mode == 'MASK':
+                # bpy.data.masks['Mask'].animation_data is empty
+                self.report({'ERROR'}, "Not implemented.")
+                return {"CANCELLED"}
+            
+            elif mode == 'CACHEFILE':
+                self.report({'ERROR'}, "Not implemented.")
+                return {"CANCELLED"}
+            
+            else: # Mode can be: DOPESHEET, ACTION, 'SHAPEKEY'
+                selected_keys = self.selected_ctrl_points(context) 
+                
+        elif space.type == 'GRAPH_EDITOR':
+            selected_keys = self.selected_ctrl_points(context) 
+        
         if not selected_keys:
-            self.report({'ERROR'}, "Nothing selected.")
+            self.report({'ERROR'}, "No keyframes to render.")
             return {"CANCELLED"}
 
         """ Return integers whenever possible """
@@ -2584,6 +2617,8 @@ class LOOM_OT_verify_terminal(bpy.types.Operator):
                 prefs.terminal = 'xfce4-terminal'
             elif self.verify_app(["xterm", "--help"]):
                 prefs.terminal = 'xterm'
+            else:
+                self.report({'INFO'}, "Terminal not supported.")
 
         elif platform.startswith('freebsd'):
             if self.verify_app(["xterm", "--help"]):
