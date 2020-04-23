@@ -33,8 +33,8 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 4),
-    "blender": (2, 81, 0),
+    "version": (0, 5),
+    "blender": (2, 82, 0),
     "location": "Render Menu or Render Panel (optional)",
     "warning": "", # used for warning icon and text in addons panel
     "wiki_url": "https://github.com/p2or/blender-loom",
@@ -574,7 +574,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     """Render selected keys of the dopesheet or graph editor"""
     bl_idname = "loom.render_selected_keys"
     bl_label = "Render Selected Keyframes"
-    bl_description = "Render selected keys in the dopesheet"
+    bl_description = "Render selected keys in the Timeline, Graph Editor or Dopesheet"
     bl_options = {'REGISTER'}
 
     def int_filter(self, flt):
@@ -3059,6 +3059,10 @@ def filter_frames(frame_input, increment=1, filter_individual=False):
     return float_frames if None in int_frames else int_frames
 
 
+# -------------------------------------------------------------------
+#    Menus
+# -------------------------------------------------------------------
+
 def draw_loom_render_panel(self, context):
     prefs = context.preferences.addons[__name__].preferences
     if prefs.display_ui:
@@ -3075,16 +3079,25 @@ def draw_loom_render_panel(self, context):
         row = layout.row(align=True)
 
 
+class LOOM_MT_render_menu(bpy.types.Menu):
+    bl_label = "Loom"
+    bl_idname = "LOOM_MT_render_menu"
+
+    def draw(self, context):
+        prefs = context.preferences.addons[__name__].preferences
+        layout = self.layout
+        layout.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #RENDER_ANIMATION
+        layout.operator(LOOM_OT_encode_sequence.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence")#FILE_MOVIE
+        layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode") #SEQ_LUMA_WAVEFORM
+        layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
+        if prefs.playblast_flag:
+            layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
+
 def draw_loom_render_menu(self, context):
-    prefs = context.preferences.addons[__name__].preferences
     layout = self.layout
     layout.separator()
-    layout.operator(LOOM_OT_render_dialog.bl_idname, icon='RENDER_ANIMATION')
-    layout.operator(LOOM_OT_encode_sequence.bl_idname, icon='FILE_MOVIE', text="Encode Image Sequence")
-    layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='SEQ_LUMA_WAVEFORM', text="Batch Render and Encode")
-    if prefs.playblast_flag:
-        layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
-
+    layout.menu(LOOM_MT_render_menu.bl_idname, icon='RENDER_STILL')
+    
 
 # -------------------------------------------------------------------
 #    Registration & Shortcuts
@@ -3134,7 +3147,8 @@ classes = (
     LoomGenericArgumentCollection,
     LOOM_OT_run_terminal,
     LOOM_OT_delete_bash_files,
-    LOOM_OT_delete_file
+    LOOM_OT_delete_file,
+    LOOM_MT_render_menu
 )
 
 
