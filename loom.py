@@ -34,7 +34,7 @@ bl_info = {
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
     "version": (0, 5),
-    "blender": (2, 82, 0),
+    "blender": (2, 81, 0),
     "location": "Render Menu or Render Panel (optional)",
     "warning": "", # used for warning icon and text in addons panel
     "wiki_url": "https://github.com/p2or/blender-loom",
@@ -574,7 +574,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     """Render selected keys of the dopesheet or graph editor"""
     bl_idname = "loom.render_selected_keys"
     bl_label = "Render Selected Keyframes"
-    bl_description = "Render selected keys in the Timeline, Graph Editor or Dopesheet"
+    bl_description = "Render selected Keyframes in the Timeline, Graph Editor or Dopesheet"
     bl_options = {'REGISTER'}
 
     def int_filter(self, flt):
@@ -662,6 +662,34 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         frames = selected_keys if None in int_frames else int_frames
 
         bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(frames))
+        return {'FINISHED'}
+
+
+class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
+    """Render selected markers of the dopesheet or timeline"""
+    bl_idname = "loom.render_selected_markers"
+    bl_label = "Render Selected Markers"
+    bl_description = "Render selected Markers in the Timeline or Dopesheet"
+    bl_options = {'REGISTER'}
+
+    def rangify_frames(self, frames):
+        """ Converts a list of integers to range string [1,2,3] -> '1-3' """
+        G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
+        return ",".join("-".join(map(str,(g[0],g[-1])[:len(g)])) for g in G)
+
+    @classmethod
+    def poll(cls, context):
+        editors = ('DOPESHEET_EDITOR', 'TIMELINE')
+        return context.space_data.type in editors and \
+            not context.scene.render.is_movie_format
+
+    def execute(self, context):
+        selected_markers = sorted(m.frame for m in context.scene.timeline_markers if m.select)
+        if not selected_markers:
+            self.report({'ERROR'}, "No markers to render.")
+            return {"CANCELLED"}
+
+        bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(selected_markers))
         return {'FINISHED'}
 
 
@@ -3090,6 +3118,7 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         layout.operator(LOOM_OT_encode_sequence.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence")#FILE_MOVIE
         layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode") #SEQ_LUMA_WAVEFORM
         layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
+        layout.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Selected Markers")
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
 
@@ -3119,6 +3148,7 @@ classes = (
     LOOM_OT_render_dialog,
     LOOM_OT_render_input_dialog,
     LOOM_OT_selected_keys_dialog,
+    LOOM_OT_selected_makers_dialog,
     LOOM_MT_display_settings,
     LOOM_UL_batch_list,
     LOOM_OT_batch_dialog,
