@@ -3074,6 +3074,176 @@ class LOOM_OT_delete_file(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+class LOOM_OT_utils_marker_unbind(bpy.types.Operator):
+    """Unbind Markers in Selection"""
+    bl_idname = "loom.unbind_markers"
+    bl_label = "Unbind Markers from Cameras in Selection"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        return any(m for m in context.scene.timeline_markers if m.select)
+    
+    def execute(self, context):
+        marker_candidates = [m for m in context.scene.timeline_markers if m.select]
+        for m in marker_candidates:
+            m.camera = None
+        self.report({'INFO'}, "Detached {} Marker(s)".format(len(marker_candidates))) 
+        
+        return {'FINISHED'}
+        
+
+class LOOM_OT_utils_marker_rename(bpy.types.Operator):
+    """Rename Markers in Selection"""
+    bl_idname = "loom.rename_markers"
+    bl_label = "Rename Markers in Selection"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_property = "new_name"
+    
+    new_name: bpy.props.StringProperty(
+        name="New Name",
+        default="$SCENE_$LENS_$F4_###"
+        )
+    
+    @classmethod
+    def poll(cls, context):
+        return any(m for m in context.scene.timeline_markers if m.select)
+    
+    def execute(self, context):
+        frame_curr = context.scene.frame_current
+        markers = [m for m in context.scene.timeline_markers if m.select]
+        markers = sorted(markers, key=lambda m: m.frame)
+        for c, m in enumerate(markers):
+            frame_flag = False
+            marker_name = self.new_name
+            if "$" in marker_name:
+                context.scene.frame_set(m.frame) # todo
+                marker_name = replace_globals(marker_name)
+                frame_flag = True
+            if "#" in marker_name:
+                hashes = self.new_name.count("#")
+                number = "{n:0{digits}d}".format(n=c, digits=hashes)
+                marker_name = marker_name.replace("#"*hashes, number)
+            m.name = marker_name
+        
+        if frame_flag:   
+            context.scene.frame_set(frame_curr)
+        return {'FINISHED'}
+        
+    def invoke(self, context, event):
+        wm = context.window_manager
+        dpi = context.preferences.system.pixel_size
+        ui_size = context.preferences.system.ui_scale
+        dialog_size = 450 * dpi * ui_size
+        return wm.invoke_props_dialog(self, width=int(dialog_size))
+
+    def draw(self, context):
+        layout = self.layout
+        layout.row().prop(self, "new_name")
+        layout.row()
+        
+        
+
+class LOOM_OT_utils_marker_generate(bpy.types.Operator):
+    """Add Markers from Cameras in Selection"""
+    bl_idname = "loom.generate_markers"
+    bl_label = "Add Markers based on Selected Cameras"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def playhead(self, context):
+        if self.playhead:
+            self.frame = context.scene.frame_current
+        else:
+            self.frame = max(
+                context.scene.frame_start, 
+                max([m.frame for m in context.scene.timeline_markers], default=1))
+                
+    offset: bpy.props.IntProperty(
+        name="Frame Offset",
+        description="Offset Markers by Frame",
+        default=1, min=1)
+        
+    frame: bpy.props.IntProperty(
+        name="Insert on Frame",
+        default=1)
+    
+    sort_reverse: bpy.props.BoolProperty(
+        name = "Add Camera Markers in reverse Order",
+        default = False)
+
+    playhead: bpy.props.BoolProperty(
+        name = "Insert Markers at Playhead Position",
+        default = False,
+        update=playhead)
+
+    @classmethod
+    def poll(cls, context):
+        return any(c for c in context.selected_objects if c.type == 'CAMERA')
+        
+    def execute(self, context):
+        cam_candidates = [c for c in context.selected_objects if c.type == 'CAMERA']
+        if not cam_candidates:
+            self.report({'INFO'}, "No Cameras in Selection")
+            return {"CANCELLED"}
+        
+        cam_candidates = sorted(
+            cam_candidates, 
+            key=lambda o: o.name, 
+            reverse=self.sort_reverse)
+        
+        if self.playhead:
+            self.frame = context.scene.frame_current
+            
+        markers = context.scene.timeline_markers
+        marker_frames = sorted(m.frame for m in markers)
+        
+        for cam in cam_candidates:
+            if self.frame in marker_frames:
+                print ("FOUNDDDDD", marker_frames)
+                m = [m for m in markers if m.frame==self.frame][0]
+                m.name = cam.name
+            else:            
+                m = markers.new(cam.name, frame=self.frame)
+            m.camera = cam
+            self.frame += self.offset
+            
+        self.report({'INFO'}, "Added {} Markers".format(len(cam_candidates)))
+        return {'FINISHED'}
+        
+    def invoke(self, context, event):
+        if self.playhead:
+            self.frame = context.scene.frame_current
+        return context.window_manager.invoke_props_dialog(self, width=500)
+    
+    def draw(self, context):
+        scn = context.scene        
+        layout = self.layout  # layout.label(text="Render Image Sequence")
+        
+        layout.separator()
+
+        row = layout.row()
+        split = row.split(factor=0.9, align=True)
+        c = split.column(align=True)
+        c.prop(self, "frame")
+        c.enabled = not self.playhead
+        col = split.column(align=True)
+        col.prop(self, "playhead", icon='PREVIEW_RANGE', text="")
+        '''
+        row = layout.row()
+        split = row.split(factor=0.9, align=True)
+        col = split.column(align=True)
+        col.prop(self, "sort", icon='SORTALPHA')   
+        col = split.column(align=True)
+        col.prop(self, "sort_reverse", icon='SORT_DESC', text="")
+        '''
+        row = layout.row()
+        row.prop(self, "sort_reverse", icon='SORTALPHA')
+        
+        row = layout.row()
+        row.prop(self, "offset")        
+        layout.separator()
+
+
 # -------------------------------------------------------------------
 #    Helper
 # -------------------------------------------------------------------
@@ -3250,6 +3420,22 @@ def draw_loom_render_menu(self, context):
     layout.menu(LOOM_MT_render_menu.bl_idname, icon='RENDER_STILL')
 
 
+class LOOM_MT_marker_menu(bpy.types.Menu):
+    bl_label = "Loom"
+    bl_idname = "LOOM_MT_marker_menu"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator(LOOM_OT_utils_marker_generate.bl_idname, icon='CON_CAMERASOLVER', text="Markers from Cameras")
+        layout.operator(LOOM_OT_utils_marker_unbind.bl_idname, icon='UNLINKED', text="Unbind Selected Markers")
+        layout.operator(LOOM_OT_utils_marker_rename.bl_idname, icon='PMARKER_ACT', text="Batch Rename Marker")
+        
+def draw_loom_marker_menu(self, context):
+    layout = self.layout
+    layout.separator()
+    layout.menu(LOOM_MT_marker_menu.bl_idname)
+
+
 def draw_loom_output(self, context):
     """Append Properties and Operators to the Output Area"""
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
@@ -3274,7 +3460,9 @@ user_keymap_ids = []
 global_var_defaults = {
     "$BLEND": 'bpy.path.basename(bpy.context.blend_data.filepath)[:-6]',
     "$F4": '"{:04d}".format(bpy.context.scene.frame_current)',
+    "$SCENE": 'bpy.context.scene.name',
     "$CAMERA": 'bpy.context.scene.camera.name',
+    "$LENS": '"{:0.0f}mm".format(bpy.context.scene.camera.data.lens)',
     "$VIEWLAYER": 'bpy.context.view_layer.name',
     "$MARKER": 'next((i.name for i in bpy.context.scene.timeline_markers if i.frame == bpy.context.scene.frame_current), "NO_NAME")',
     "$SUM": 'str(sum([8, 16, 32]))'
@@ -3326,7 +3514,11 @@ classes = (
     LOOM_OT_run_terminal,
     LOOM_OT_delete_bash_files,
     LOOM_OT_delete_file,
-    LOOM_MT_render_menu
+    LOOM_MT_render_menu,
+    LOOM_MT_marker_menu,
+    LOOM_OT_utils_marker_generate,
+    LOOM_OT_utils_marker_rename,
+    LOOM_OT_utils_marker_unbind
 )
 
 
@@ -3367,10 +3559,13 @@ def register():
             gvi.prop = value
 
     bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu)
+    bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
     bpy.types.RENDER_PT_output.append(draw_loom_output)
+    
 
 def unregister():
     bpy.types.RENDER_PT_output.remove(draw_loom_output)
+    bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TOPBAR_MT_render.remove(draw_loom_render_menu)
     
     from bpy.utils import unregister_class
