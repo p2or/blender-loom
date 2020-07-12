@@ -228,8 +228,8 @@ class LoomPreferences(bpy.types.AddonPreferences):
         row = box.row()
         row.template_list("LOOM_UL_globals", "", self, "global_variable_coll", self, "global_variable_idx", rows=6)
         col = row.column(align=True)
-        col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='ZOOM_IN', text="").action = 'ADD'
-        col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='ZOOM_OUT', text="").action = 'REMOVE'
+        col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='ADD', text="").action = 'ADD'
+        col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
         col.separator()
 
         exp_box = box.box()
@@ -3199,7 +3199,7 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
         
         for cam in cam_candidates:
             if self.frame in marker_frames:
-                print ("FOUNDDDDD", marker_frames)
+                #print ("FOUNDDDDD", marker_frames)
                 m = [m for m in markers if m.frame==self.frame][0]
                 m.name = cam.name
             else:            
@@ -3217,8 +3217,7 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
     
     def draw(self, context):
         scn = context.scene        
-        layout = self.layout  # layout.label(text="Render Image Sequence")
-        
+        layout = self.layout
         layout.separator()
 
         row = layout.row()
@@ -3227,7 +3226,7 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
         c.prop(self, "frame")
         c.enabled = not self.playhead
         col = split.column(align=True)
-        col.prop(self, "playhead", icon='PREVIEW_RANGE', text="")
+        col.prop(self, "playhead", icon='NLA_PUSHDOWN', text="")
         '''
         row = layout.row()
         split = row.split(factor=0.9, align=True)
@@ -3428,7 +3427,7 @@ class LOOM_MT_marker_menu(bpy.types.Menu):
         layout = self.layout
         layout.operator(LOOM_OT_utils_marker_generate.bl_idname, icon='CON_CAMERASOLVER', text="Markers from Cameras")
         layout.operator(LOOM_OT_utils_marker_unbind.bl_idname, icon='UNLINKED', text="Unbind Selected Markers")
-        layout.operator(LOOM_OT_utils_marker_rename.bl_idname, icon='PMARKER_ACT', text="Batch Rename Marker")
+        layout.operator(LOOM_OT_utils_marker_rename.bl_idname, icon='FONT_DATA', text="Batch Rename Markers")
         
 def draw_loom_marker_menu(self, context):
     layout = self.layout
