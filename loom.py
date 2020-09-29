@@ -305,9 +305,9 @@ class LOOM_OT_pref_reset(bpy.types.Operator):
 
 
 class LOOM_OT_actions_global_ui(bpy.types.Operator):
-    """Move items up and down, add and remove"""
-    bl_idname = "custom.list_action"
-    bl_label = "List Actions"
+    """Move global variables up and down, add and remove"""
+    bl_idname = "loom.globals_action"
+    bl_label = "Global Actions"
     bl_description = "Move items up and down, add and remove"
     bl_options = {'REGISTER'}
 
@@ -555,8 +555,8 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             self.report({'ERROR'}, "No frames to render.")
             user_error = True
         
-        out_folder, out_filename = os.path.split(scn.render.filepath)
-        if not self.write_permission(os.path.realpath(bpy.path.abspath(out_folder))):
+        out_folder, out_filename = os.path.split(bpy.path.abspath(scn.render.filepath))
+        if not self.write_permission(os.path.realpath(out_folder)):
             self.report({'ERROR'}, "Specified output folder does not exist (permission denied)")
             user_error = True
 
@@ -992,8 +992,8 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
                     info = "Encoding {} will be skipped [Missing Frames]".format(item.name)
                     self.report({'INFO'}, info)
 
-            out_folder, out_filename = os.path.split(item.path)
-            if not self.write_permission(os.path.realpath(bpy.path.abspath(out_folder))):
+            out_folder, out_filename = os.path.split(bpy.path.abspath(scn.render.filepath))
+            if not self.write_permission(os.path.realpath(out_folder)):
                 self.report({'ERROR'}, "Specified output folder does not exist (permission denied)")
                 user_error = True
 
@@ -2409,14 +2409,14 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
         """ Format output string """        
         self._output_path = scn.render.filepath
-        output_folder, self._filename = os.path.split(self._output_path)
+        output_folder, self._filename = os.path.split(bpy.path.abspath(self._output_path))
 
         """ Eval globals """
         '''
         if any(ext in self._filename for ext in glob_vars.keys()):
             self._filename = replace_globals(self._filename)
         '''
-        self._folder = os.path.realpath(bpy.path.abspath(output_folder))
+        self._folder = os.path.realpath(output_folder)
         self._extension = self.file_extension(scn.render.image_settings.file_format)
                
         if self._filename:
@@ -3438,7 +3438,7 @@ def draw_loom_marker_menu(self, context):
 def draw_loom_output(self, context):
     """Append Properties and Operators to the Output Area"""
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
-    output_folder, file_name = os.path.split(context.scene.render.filepath)
+    output_folder, file_name = os.path.split(bpy.path.abspath(context.scene.render.filepath))
 
     if any(ext in file_name for ext in glob_vars.keys()):
         layout = self.layout
