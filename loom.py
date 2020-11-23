@@ -1783,7 +1783,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         if lum.lost_frames:
             row = layout.row()
             row = layout.row(align=True)
-            fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, icon='GHOST', text="Fill Gaps with Copies")
+            fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, icon='GHOST_ENABLED', text="Fill Gaps with Copies")
             fg.sequence_path = lum.sequence_encode
             txt = "Render Missing Frames"
             di = row.operator(LOOM_OT_render_input_dialog.bl_idname, icon='RENDER_STILL', text=txt)
