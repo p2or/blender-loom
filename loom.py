@@ -33,10 +33,10 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 6),
+    "version": (0, 7),
     "blender": (2, 82, 0),
-    "location": "Render Menu or Render Panel (optional)",
-    "warning": "", # used for warning icon and text in addons panel
+    "location": "Render Menu",
+    "warning": "",
     "wiki_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
     "support": "COMMUNITY",
@@ -247,7 +247,6 @@ class LoomPreferences(bpy.types.AddonPreferences):
         split = row.split(factor=0.2)
         split.label(text="Result:", icon='FILE_VOLUME')
         split.label(text="{}".format(eval_info))
-        #exp_box.separator()
 
         """ Hotkey box """
         box = layout.box()
@@ -289,7 +288,6 @@ class LOOM_OT_pref_reset(bpy.types.Operator):
         prefs.property_unset("user_player")
         prefs.property_unset("log_render")
         prefs.property_unset("log_render_limit")
-        #prefs.property_unset("ffmpeg_path")
         prefs.property_unset("default_codec")
         prefs.property_unset("playblast_flag")
 
@@ -449,7 +447,8 @@ class LOOM_OT_render_full_scale(bpy.types.Operator):
     bl_description = "Set Resolution Percentage Scale to 100%"
     bl_options = {'INTERNAL'}
 
-    def execute(self, context): #context.area.tag_redraw()
+    def execute(self, context): 
+        #context.area.tag_redraw()
         context.scene.render.resolution_percentage = 100
         return {'FINISHED'}
 
@@ -898,8 +897,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         description="Shutdown when done",
         default=False)
 
-    def determine_type(self, val): 
-        #val = ast.literal_eval(s)
+    def determine_type(self, val): #val = ast.literal_eval(s)
         if (isinstance(val, int)):
             return ("chi")
         elif (isinstance(val, float)):
@@ -1061,7 +1059,6 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         layout = self.layout
         row = layout.row()
 
-       
         row.template_list(
             listtype_name = "LOOM_UL_batch_list", 
             list_id = "", 
@@ -1132,7 +1129,7 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
     
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
-        win.cursor_warp(x=self.cursor_pos[0]+200, y=self.cursor_pos[1]+200) # re-invoke the dialog
+        win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # re-invoke the dialog
         bpy.ops.loom.batch_render_dialog('INVOKE_DEFAULT')
         #bpy.context.window.screen = bpy.context.window.screen
 
@@ -1209,7 +1206,7 @@ class LOOM_OT_scan_blends(bpy.types.Operator, ImportHelper):
 
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
-        win.cursor_warp(x=self.cursor_pos[0]+200, y=self.cursor_pos[1]+200) # re-invoke the dialog
+        win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # re-invoke the dialog
         bpy.ops.loom.batch_render_dialog('INVOKE_DEFAULT')
         #bpy.context.window.screen = bpy.context.window.screen
         
@@ -1504,8 +1501,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         description="Confirm when done",
         default=True)
 
-    # https://avpres.net/FFmpeg/sq_ProRes.html, 
-    # https://trac.ffmpeg.org/wiki/Encode/VFX
+    # https://avpres.net/FFmpeg/sq_ProRes.html, https://trac.ffmpeg.org/wiki/Encode/VFX
     encode_presets = {
         "PRORES422PR" : ["-c:v", "prores_ks", "-profile:v", 0],
         "PRORES422LT" : ["-c:v", "prores_ks", "-profile:v", 1],
@@ -1783,7 +1779,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         if lum.lost_frames:
             row = layout.row()
             row = layout.row(align=True)
-            fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, icon='GHOST_ENABLED', text="Fill Gaps with Copies")
+            fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, icon='COPY_ID', text="Fill Gaps with Copies")
             fg.sequence_path = lum.sequence_encode
             txt = "Render Missing Frames"
             di = row.operator(LOOM_OT_render_input_dialog.bl_idname, icon='RENDER_STILL', text=txt)
@@ -1806,8 +1802,6 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
         #default="*" + ";*".join(bpy.path.extensions_image),
         options={'HIDDEN'})
 
-    # List of operator properties, the attributes will be assigned
-    # to the class instance from the operator settings before calling.
     verify_sequence: bpy.props.BoolProperty(
             name="Verify Image Sequence",
             description="Detects missing frames",
@@ -1843,7 +1837,7 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
 
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
-        win.cursor_warp(x=self.cursor_pos[0]-200, y=self.cursor_pos[1]+200) # x-100 y-+70
+        win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # x-100 y-+70
         bpy.ops.loom.encode_sequence('INVOKE_DEFAULT') # re-invoke the dialog
         
     @classmethod
@@ -1947,7 +1941,7 @@ class LOOM_OT_encode_select_movie(bpy.types.Operator, ImportHelper):
 
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
-        win.cursor_warp(x=self.cursor_pos[0]-200, y=self.cursor_pos[1]+200)
+        win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100)
         bpy.ops.loom.encode_sequence('INVOKE_DEFAULT') # re-invoke the dialog
         
     @classmethod
@@ -2315,6 +2309,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
     _timer = _frames = _stop = _rendering = _dec = _log = None
     _output_path = _folder = _filename = _extension = None
     _subframe_flag = False
+    _output_nodes = {}
     
     @classmethod
     def poll(cls, context):
@@ -2325,7 +2320,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
     def cancel_render(self, scene, depsgraph):
         self._stop = True
-        scene.render.filepath = self._output_path       
+        self.reset_output_paths(scene)
         self._rendered_frames.pop()
 
     def post_render(self, scene, depsgraph):
@@ -2343,17 +2338,97 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             subs.append((int(main_frame), float('.' + sub_frame)))
         return subs
 
-    def format_frame(self, frame):
-        file_name = replace_globals(self._filename)
-        return "{f}{fn:0{lz}d}.{ext}".format(
-            f=file_name, fn=frame, lz=self.digits, ext=self._extension)
+    def format_frame(self, file_name, frame, extension=None):
+        file_name = replace_globals(file_name)
+        if extension:
+            return "{f}{fn:0{lz}d}.{ext}".format(
+                f=file_name, fn=frame, lz=self.digits, ext=extension)
+        else:
+            return "{f}{fn:0{lz}d}_".format(
+                f=file_name, fn=frame, lz=self.digits)
 
-    def format_subframe(self, frame):
-        file_name = replace_globals(self._filename)
+    def format_subframe(self, file_name, frame, extension=None):
+        file_name = replace_globals(file_name)
         sub_frame = "{sf:.{dec}f}".format(sf = frame[1], dec=self._dec).split('.')[1]
-        return "{f}{mf:0{lz}d}{sf}.{ext}".format(
-            f=file_name, mf=frame[0], lz=self.digits, 
-            sf=sub_frame, ext=self._extension)
+        if extension:
+            return "{f}{mf:0{lz}d}{sf}.{ext}".format(
+                f=file_name, mf=frame[0], lz=self.digits, 
+                sf=sub_frame, ext=extension)
+        else:
+            return "{f}{mf:0{lz}d}{sf}_".format(
+                f=file_name, mf=frame[0], lz=self.digits, sf=sub_frame)
+
+    def safe_filename(self, file_name):
+        if file_name:
+            if file_name.lower().endswith(tuple(self._image_formats.values())):
+                name_real, ext = os.path.splitext(file_name)
+            else:
+                name_real = file_name
+            if "#" in name_real:
+                hashes = re.findall("#+$", name_real)
+                name_real = re.sub("#", '', name_real)
+                self.digits = len(hashes[0])
+            return name_real + "_" if name_real[-1].isdigit() else name_real
+
+        else: # If filename not specified, use blend-file name instead
+            blend_name, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
+            return blend_name + "_"
+
+    def out_nodes(self, scene):
+        if scene.node_tree:
+            return [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
+        else:
+            return []
+
+    def reset_output_paths(self, scene):
+        scene.render.filepath = self._output_path
+        for k, v in self._output_nodes.items():
+            k.base_path = v["Base Path"]
+            if "File Slots" in v: # Reset Slots
+                for c, fs in enumerate(k.file_slots):
+                    fs.path = v["File Slots"][c]
+
+    def frame_repath(self, scene, frame_number):
+        ''' Set the frame, assamble main file and output node paths '''
+        if self._subframe_flag:
+            scene.frame_set(frame_number[0], subframe=frame_number[1])
+            ff = self.format_subframe(self._filename, frame_number, self._extension)
+        else:
+            scene.frame_set(frame_number)
+            ff = self.format_frame(self._filename, frame_number, self._extension)
+        # Final main path assembly
+        scene.render.filepath = os.path.join(self._folder, ff)
+                
+        for k, v in self._output_nodes.items():
+            if "File Slots" in v:
+                k.base_path = replace_globals(k.base_path)
+                for c, f in enumerate(k.file_slots):
+                    if self._subframe_flag:
+                        f.path = self.format_subframe(v["File Slots"][c], frame_number)
+                    else:
+                        #f.path = self.format_frame(v["File Slots"][c], frame_number)
+                        f.path = replace_globals(v["File Slots"][c])
+            else:
+                if self._subframe_flag:
+                    of = self.format_subframe(v["Filename"], frame_number)
+                else:
+                    #of = self.format_frame(v["Filename"], frame_number)
+                    of = replace_globals(v["Filename"])
+                # Final output node path assembly
+                k.base_path = os.path.join(replace_globals(v["Folder"]), of)
+
+    def start_render(self, scene, frame, silent=False):
+        rndr = scene.render # Skip frame, if rendered already
+        if not rndr.use_overwrite and os.path.isfile(rndr.filepath):
+            self._skipped_frames.append(frame)
+            self.post_render(scene, None)
+        else:
+            if silent:
+                bpy.ops.render.render(write_still=True)
+            else:
+                bpy.ops.render.render("INVOKE_DEFAULT", write_still=True)
+            if frame not in self._rendered_frames:
+                self._rendered_frames.append(frame)
 
     def log_sequence(self, scene, limit):
         from time import ctime #lum.render_collection.clear()
@@ -2384,13 +2459,12 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 "Images" if frame_count > 1 else "Image", self._folder))
                 
         if self._skipped_frames:
-            #skip_count = len(self._skipped_frames)
             if isinstance(self._skipped_frames[0], tuple):
                 skipped = ', '.join("{mf}.{sf}".format(
                     mf=i[0], sf=str(i[1]).split(".")[1]) for i in self._skipped_frames)
             else:
                 skipped = ','.join(map(str, self._skipped_frames))
-            self.report({'WARNING'}, "{} skipped (to not overwrite existing file)".format(skipped))
+            self.report({'WARNING'}, "{} skipped (would overwrite existing file(s))".format(skipped))
 
     def execute(self, context):
         scn = context.scene
@@ -2407,34 +2481,29 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         if not self.render_silent:
             self.report({'INFO'}, "Rendering Image Sequence...\n")
 
-        """ Format output string """        
+        """ Main output path """        
         self._output_path = scn.render.filepath
         output_folder, self._filename = os.path.split(bpy.path.abspath(self._output_path))
-
-        """ Eval globals """
-        '''
-        if any(ext in self._filename for ext in glob_vars.keys()):
-            self._filename = replace_globals(self._filename)
-        '''
         self._folder = os.path.realpath(output_folder)
         self._extension = self.file_extension(scn.render.image_settings.file_format)
-               
-        if self._filename:
-            if self._filename.lower().endswith(tuple(self._image_formats.values())):
-                name_real, ext = os.path.splitext(self._filename)
-            else:
-                name_real = self._filename
-            if "#" in name_real:
-                hashes = re.findall("#+$", name_real)
-                name_real = re.sub("#", '', name_real)
-                self.digits = len(hashes[0]) 
-            self._filename = name_real + "_" if name_real[-1].isdigit() else name_real
+        self._filename = self.safe_filename(self._filename)
+        #self._output_path = os.path.join(self._folder, self._filename)
 
-        else: # If filename not specified, use blend-file name instead
-            self._filename, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
-            self._filename += "_"
-            self._output_path = os.path.join(self._folder, self._filename)
+        """ Output node paths """
+        for out_node in self.out_nodes(scn):
+            fd, fn = os.path.split(bpy.path.abspath(out_node.base_path))
+            self._output_nodes[out_node] = {
+                "Type": out_node.format.file_format,
+                "Extension": self.file_extension(out_node.format.file_format),
+                "Base Path": out_node.base_path,
+                "Folder": os.path.realpath(fd),
+                "Filename": fn}
 
+            """ Single file slots in case """
+            if not "LAYER" in out_node.format.file_format:
+                self._output_nodes[out_node].update({"File Slots": [s.path for s in out_node.file_slots]})
+                #"File Slots": {s.path : self.safe_filename(s.path) for s in out_node.file_slots}
+        
         """ Clear assigned frame numbers """
         self._skipped_frames.clear(), self._rendered_frames.clear()
 
@@ -2444,34 +2513,17 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             self._dec = max(map(lambda x: len(str(x[1]).split('.')[1]), self._frames))
             self._subframe_flag = True
 
-        """ Logging  """
+        """ Logging """
         if prefs.log_render: self.log_sequence(scn, prefs.log_render_limit)
         
         """ Render silent """
         if self.render_silent:
-            for frame_number in self._frames:             
-                
-                # Set the frame & render
-                if self._subframe_flag:
-                    scn.frame_set(frame_number[0], subframe=frame_number[1])
-                else:
-                    scn.frame_set(frame_number)
-
-                """ Assemble filename & set output """
-                scn.render.filepath = os.path.join(
-                    self._folder, self.format_subframe(frame_number) if self._subframe_flag \
-                    else self.format_frame(frame_number))
-
-                # Skip frame, if already rendered
-                if not scn.render.use_overwrite and os.path.isfile(scn.render.filepath):
-                    self._skipped_frames.append(frame_number)
-                else:   
-                    bpy.ops.render.render(write_still=True)
-                    if frame_number not in self._rendered_frames:
-                        self._rendered_frames.append(frame_number)
+            for frame_number in self._frames:
+                self.frame_repath(scn, frame_number)
+                self.start_render(scn, frame_number, silent=True)
 
             """ Reset output path & display results """
-            scn.render.filepath = self._output_path #self.final_report() Prints it twice for whatever reason
+            self.reset_output_paths(scn)
             return {"FINISHED"}
 
         """ Add timer & handlers for modal """
@@ -2498,7 +2550,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 bpy.app.handlers.render_cancel.remove(self.cancel_render)
 
                 """ Reset output path & display results """
-                scn.render.filepath = self._output_path #self._extension
+                self.reset_output_paths(scn)
                 self.final_report()
                 return {"FINISHED"}
 
@@ -2506,27 +2558,9 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 """ Render within UI & show the progress as usual """
                 if self._frames:
                     frame_number = self._frames[0]
-                    # Set the frame & render
-                    if self._subframe_flag:
-                        scn.frame_set(frame_number[0], subframe=frame_number[1])
-                    else:
-                        scn.frame_set(frame_number)
-                    
-                    # Set file path
-                    scn.render.filepath = os.path.join(
-                        self._folder, self.format_subframe(frame_number) if self._subframe_flag \
-                        else self.format_frame(frame_number))
+                    self.frame_repath(scn, frame_number)
+                    self.start_render(scn, frame_number, silent=False)
 
-                    if not scn.render.use_overwrite and os.path.isfile(scn.render.filepath):
-                        # Skip frame if file already rendered
-                        self._skipped_frames.append(frame_number)
-                        self.post_render(scn, None)
-                    
-                    else:
-                        bpy.ops.render.render("INVOKE_DEFAULT", write_still=True)
-                        if frame_number not in self._rendered_frames:
-                            self._rendered_frames.append(frame_number)
-                        
         return {"PASS_THROUGH"}
 
 
@@ -3142,7 +3176,6 @@ class LOOM_OT_utils_marker_rename(bpy.types.Operator):
         layout.row().prop(self, "new_name")
         layout.row()
         
-        
 
 class LOOM_OT_utils_marker_generate(bpy.types.Operator):
     """Add Markers from Cameras in Selection"""
@@ -3227,17 +3260,8 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
         c.enabled = not self.playhead
         col = split.column(align=True)
         col.prop(self, "playhead", icon='NLA_PUSHDOWN', text="")
-        '''
-        row = layout.row()
-        split = row.split(factor=0.9, align=True)
-        col = split.column(align=True)
-        col.prop(self, "sort", icon='SORTALPHA')   
-        col = split.column(align=True)
-        col.prop(self, "sort_reverse", icon='SORT_DESC', text="")
-        '''
         row = layout.row()
         row.prop(self, "sort_reverse", icon='SORTALPHA')
-        
         row = layout.row()
         row.prop(self, "offset")        
         layout.separator()
@@ -3549,7 +3573,7 @@ def register():
         kmi.active = True
         addon_keymaps.append((km, kmi))
 
-    # Add globals
+    # Globals
     glob = bpy.context.preferences.addons[__name__].preferences.global_variable_coll
     if not glob:
         for key, value in global_var_defaults.items():
