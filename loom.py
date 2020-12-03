@@ -1070,8 +1070,8 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         )
         
         col = row.column(align=True)
-        col.operator("loom.batch_select_blends", icon='ZOOM_IN', text="")
-        col.operator("loom.batch_dialog_action", icon='ZOOM_OUT', text="").action = 'REMOVE'
+        col.operator("loom.batch_select_blends", icon='ADD', text="")
+        col.operator("loom.batch_dialog_action", icon='REMOVE', text="").action = 'REMOVE'
         col.menu("LOOM_MT_display_settings", icon='DOWNARROW_HLT', text="")
         col.separator()
         col.separator()
@@ -2902,16 +2902,29 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
         try:
             fp = open(bash_path, 'w')
             fp.write('#! /bin/sh\n')
+
             if isinstance(bash_args[0], list):
                 bash_args = [[self.binary] + i if self.binary else i for i in bash_args]
+
+                # Add quotes to python command
                 bash_args = [["{b}{e}{b}".format(b='\"', e=x) \
                     if x.startswith("import") else x for x in args] for args in bash_args]
+                # Add quotes to blend file path
+                bash_args = [["{b}{e}{b}".format(b='\"', e=x) \
+                    if x.endswith(".blend") else x for x in args] for args in bash_args]
+                # Write the the file
                 for i in bash_args:
                     fp.write(" ".join(i) + "\n")
             else:
                 bash_args = [self.binary] + bash_args if self.binary else bash_args
+
+                # Add quotes to python command
                 bash_args = ["{b}{e}{b}".format(b='\"', e=x) \
                     if x.startswith("import") else x for x in bash_args]
+                # Add quotes to blend file path
+                bash_args = ["{b}{e}{b}".format(b='\"', e=x) \
+                    if x.endswith(".blend") else x for x in bash_args]
+                # Write the the file
                 fp.write(" ".join(bash_args) + "\n")
             
             if self.pause: # https://stackoverflow.com/a/17778773
@@ -2922,7 +2935,7 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
             fp.close()
             os.chmod(bash_path, 0o777)
         except:
-            self.report({'INFO'}, "Something went wrong while writing the bash file")
+            self.report({'WARNING'}, "Something went wrong while writing the bash file")
             return {'CANCELLED'}
 
     def execute(self, context):
