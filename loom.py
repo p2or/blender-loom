@@ -3390,11 +3390,14 @@ def filter_frames(frame_input, increment=1, filter_individual=False):
 
     if filter_individual:
         exclude_list = sorted(set(exclude_list).difference(conform_list))
-    float_frames = sorted(set(frame_list).difference(exclude_list))
 
     """ Return integers whenever possible """
+    float_frames = sorted(set(frame_list).difference(exclude_list))
     int_frames = [int_filter(frame) for frame in float_frames]
-    return float_frames if None in int_frames else int_frames
+    
+    """ Render in reversed frame order """
+    fframes = float_frames if None in int_frames else int_frames
+    return fframes[::-1] if frame_input.startswith("r") else fframes
 
 def isevaluable(s):
     try:
