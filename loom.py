@@ -589,7 +589,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             lum.threads = scn.render.threads  # *.5
 
         return context.window_manager.invoke_props_dialog(self, 
-            width=(prefs.render_dialog_width*context.preferences.system.pixel_size))
+            width=(prefs.render_dialog_width))
 
     def draw(self, context):
         scn = context.scene
@@ -1046,7 +1046,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
     def invoke(self, context, event):
         prefs = context.preferences.addons[__name__].preferences
         return context.window_manager.invoke_props_dialog(self, 
-            width=(prefs.batch_dialog_width*context.preferences.system.pixel_size))
+            width=(prefs.batch_dialog_width))
 
     def check(self, context):
         return True
@@ -1724,7 +1724,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
                     pass
 
         return context.window_manager.invoke_props_dialog(self, 
-            width=(prefs.encode_dialog_width*context.preferences.system.pixel_size))
+            width=(prefs.encode_dialog_width))
 
     def draw(self, context):
         lum = context.scene.loom
