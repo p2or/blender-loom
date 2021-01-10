@@ -60,7 +60,7 @@ class LOOM_UL_globals(bpy.types.UIList):
         split.prop(item, "name", text="", emboss=False, translate=False, icon=var_icon)
         split.prop(item, "prop", text="", emboss=True, translate=False, icon=eval_icon)
     def invoke(self, context, event):
-        pass   
+        pass
 
 
 class LoomPreferences(bpy.types.AddonPreferences):
@@ -120,12 +120,12 @@ class LoomPreferences(bpy.types.AddonPreferences):
         name="Default Animation Player",
         description="Use default player (User Preferences > File > Animation Player)",
         default=False)
-
+    '''
     display_ui: bpy.props.BoolProperty(
-        name="Display Buttons in Render Panel",
-        description = "Displays Buttons in Render Panel",
+        name="Display Loom Panel",
+        description = "Displays a new Panel in the Output Area",
         default=False)
-
+    '''
     ffmpeg_path: bpy.props.StringProperty(
         name="FFmpeg Binary",
         description="Path to ffmpeg",
@@ -178,6 +178,10 @@ class LoomPreferences(bpy.types.AddonPreferences):
     expression: bpy.props.StringProperty(
         name="Expression",
         description = "Test Expression")
+    
+    display_globals: bpy.props.BoolProperty(default=False)
+    display_advanced: bpy.props.BoolProperty(default=False)
+    display_hotkeys: bpy.props.BoolProperty(default=False)
 
     def draw(self, context):
         split_width = 0.4
@@ -185,95 +189,114 @@ class LoomPreferences(bpy.types.AddonPreferences):
         box = layout.box()
         split = box.split(factor=split_width)
         col = split.column()
-        if bpy.app.version < (2, 80, 0): col.prop(self, "display_ui")
+        #col.label(text="Path to FFmpeg Binary:") #prop(self, "display_ui")
         col.prop(self, "playblast_flag")
         up = col.column()
         up.prop(self, "user_player")
         up.enabled = self.playblast_flag
         col = split.column()
+        #col.prop(self, "ffmpeg_path", text="")
         col.prop(self, "render_dialog_width") 
         col.prop(self, "encode_dialog_width")
         col.prop(self, "batch_dialog_width")
 
-        box = layout.box()
-        split = box.split(factor=split_width)
-        col = split.column()
-        col.label(text="Path to FFmpeg Binary:")
-        txt = "Force generating .bat file" if platform.startswith('win32') else "Force generating .sh file"
-        col_sub = col.column()
-        col_sub.prop(self, "bash_flag", text=txt)
-        
-        """ OSX specific properties """
-        if platform.startswith('darwin'):
-            col_sub.enabled = False
-            col.prop(self, "render_background")
-            
-        """ Linux/OSX specific properties """
-        if not platform.startswith('win32'):
-            col.prop(self, "xterm_flag")
-
-        col = split.column()
-        col.prop(self, "ffmpeg_path", text="")
-        sub = col.row(align=True)
-        txt = "Delete temporary .bat Files" if platform.startswith('win32') else "Delete temporary .sh files"
-        sub.operator(LOOM_OT_delete_bash_files.bl_idname, text=txt, icon="FILE_SCRIPT")
-        script_folder = bpy.utils.script_path_user()
-        sub.operator(LOOM_OT_open_folder.bl_idname, icon="DISK_DRIVE", text="").folder_path = script_folder
-
         """ Globals box """
-        box = layout.box()
-        split = box.split()
-        col = split.column()
-        col.label(text='Globals (file name)')
-        row = box.row()
-        row.template_list("LOOM_UL_globals", "", self, "global_variable_coll", self, "global_variable_idx", rows=6)
-        col = row.column(align=True)
-        col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='ADD', text="").action = 'ADD'
-        col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
-        col.separator()
+        box_globals = layout.box()
+        row = box_globals.row()
+        row.prop(self, "display_globals",
+            icon="TRIA_DOWN" if self.display_globals else "TRIA_RIGHT",
+            icon_only=True, emboss=False)
+        row.label(text="Globals (File Output)")
 
-        exp_box = box.box()
-        row = exp_box.row()
-        row.label(text='Expression Tester')
-        row = exp_box.row()
-        split = row.split(factor=0.2)
-        split.label(text="Expression:", icon='FILE_SCRIPT')
-        split.prop(self, "expression", text="")
-        if not self.expression or self.expression.isspace():
-            eval_info = "Nothing to evaluate"
-        else:
-            eval_info = eval(self.expression) if isevaluable(self.expression) else "0"
-        row = exp_box.row()
-        split = row.split(factor=0.2)
-        split.label(text="Result:", icon='FILE_VOLUME')
-        split.label(text="{}".format(eval_info))
+        if self.display_globals:
+            row = box_globals.row()
+            row.template_list("LOOM_UL_globals", "", self, "global_variable_coll", self, "global_variable_idx", rows=6)
+            col = row.column(align=True)
+            col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='ADD', text="").action = 'ADD'
+            col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+            col.separator()
+            exp_box = box_globals.box()
+            row = exp_box.row()
+            row.label(text='Expression Tester')
+            row = exp_box.row()
+            split = row.split(factor=0.2)
+            split.label(text="Expression:", icon='FILE_SCRIPT')
+            split.prop(self, "expression", text="")
+            if not self.expression or self.expression.isspace():
+                eval_info = "Nothing to evaluate"
+            else:
+                eval_info = eval(self.expression) if isevaluable(self.expression) else "0"
+            row = exp_box.row()
+            split = row.split(factor=0.2)
+            split.label(text="Result:", icon='FILE_VOLUME')
+            split.label(text="{}".format(eval_info))
 
         """ Hotkey box """
-        box = layout.box()
-        split = box.split()
-        col = split.column()
-        col.label(text='Hotkeys')
-        kc_usr = bpy.context.window_manager.keyconfigs.user
-        km_usr = kc_usr.keymaps.get('Screen')
+        box_hotkeys = layout.box()
+        row = box_hotkeys.row()
+        row.prop(self, "display_hotkeys",
+            icon="TRIA_DOWN" if self.display_hotkeys else "TRIA_RIGHT",
+            icon_only=True, emboss=False)
+        row.label(text="Hotkeys")
 
-        if not user_keymap_ids: # Ouch, Todo!
-            for kmi_usr in km_usr.keymap_items:
-                for km_addon, kmi_addon in addon_keymaps:
-                    if kmi_addon.compare(kmi_usr):
-                        user_keymap_ids.append(kmi_usr.id)
-        for kmi_usr in km_usr.keymap_items: # user hotkeys by namespace
-            if kmi_usr.idname.startswith("loom."):
-                col.context_pointer_set("keymap", km_usr)
-                rna_keymap_ui.draw_kmi([], kc_usr, km_usr, kmi_usr, col, 0)
+        if self.display_hotkeys:
+            split = box_hotkeys.split()
+            col = split.column()
+            kc_usr = bpy.context.window_manager.keyconfigs.user
+            km_usr = kc_usr.keymaps.get('Screen')
+
+            if not user_keymap_ids: # Ouch, Todo!
+                for kmi_usr in km_usr.keymap_items:
+                    for km_addon, kmi_addon in addon_keymaps:
+                        if kmi_addon.compare(kmi_usr):
+                            user_keymap_ids.append(kmi_usr.id)
+            for kmi_usr in km_usr.keymap_items: # user hotkeys by namespace
+                if kmi_usr.idname.startswith("loom."):
+                    col.context_pointer_set("keymap", km_usr)
+                    rna_keymap_ui.draw_kmi([], kc_usr, km_usr, kmi_usr, col, 0)
+            row = layout.row()
+
+        """ Advanced box """
+        box_advanced = layout.box()
+        row = box_advanced.row()
+        row.prop(self, "display_advanced",
+            icon="TRIA_DOWN" if self.display_advanced else "TRIA_RIGHT",
+            icon_only=True, emboss=False)
+        row.label(text="Advanced Settings")
         
-        row = layout.row()
+        if self.display_advanced:
+            split = box_advanced.split(factor=split_width)
+            col = split.column()
+            col.label(text="Path to FFmpeg Binary:")
+            txt = "Force generating .bat file" if platform.startswith('win32') else "Force generating .sh file"
+            col_sub = col.column()
+            col_sub.prop(self, "bash_flag", text=txt)
+        
+            """ OSX specific properties """
+            if platform.startswith('darwin'):
+                col_sub.enabled = False
+                col.prop(self, "render_background")
+                
+            """ Linux/OSX specific properties """
+            if not platform.startswith('win32'):
+                col.prop(self, "xterm_flag")
+
+            col = split.column()
+            col.prop(self, "ffmpeg_path", text="")
+            sub = col.row(align=True)
+            txt = "Delete temporary .bat Files" if platform.startswith('win32') else "Delete temporary .sh files"
+            sub.operator(LOOM_OT_delete_bash_files.bl_idname, text=txt, icon="FILE_SCRIPT")
+            script_folder = bpy.utils.script_path_user()
+            sub.operator(LOOM_OT_open_folder.bl_idname, icon="DISK_DRIVE", text="").folder_path = script_folder
+
+        """ Reset Prefs """
         layout.operator(LOOM_OT_pref_reset.bl_idname, icon='FILE_REFRESH')
 
 
 class LOOM_OT_pref_reset(bpy.types.Operator):
     """Reset Add-on Preferences"""
     bl_idname = "loom.reset_preferences"
-    bl_label = "Reset Preferences"
+    bl_label = "Reset Loom Preferences"
     bl_options = {"INTERNAL"}
 
     def execute(self, context):
@@ -284,12 +307,19 @@ class LOOM_OT_pref_reset(bpy.types.Operator):
         prefs.property_unset("encode_dialog_width")
         prefs.property_unset("bash_flag")
         prefs.property_unset("bash_file")
-        prefs.property_unset("display_ui")
+        #prefs.property_unset("display_ui")
         prefs.property_unset("user_player")
         prefs.property_unset("log_render")
         prefs.property_unset("log_render_limit")
         prefs.property_unset("default_codec")
         prefs.property_unset("playblast_flag")
+
+        """ Restore Globals """
+        prefs.global_variable_coll.clear()
+        for key, value in global_var_defaults.items():
+            gvi = prefs.global_variable_coll.add()
+            gvi.name = key
+            gvi.prop = value
 
         """ Restore default keys by keymap ids """
         kc_usr = context.window_manager.keyconfigs.user
@@ -298,7 +328,7 @@ class LOOM_OT_pref_reset(bpy.types.Operator):
             kmi = km_usr.keymap_items.from_id(i)
             if kmi:
                 km_usr.restore_item_to_default(kmi)
-        #bpy.ops.wm.save_userpref()
+        
         return {'FINISHED'}
 
 
@@ -3416,24 +3446,8 @@ def replace_globals(s, debug=False):
 
 
 # -------------------------------------------------------------------
-#    Menus
+#    Panels and Menus
 # -------------------------------------------------------------------
-
-def draw_loom_render_panel(self, context):
-    prefs = context.preferences.addons[__name__].preferences
-    if prefs.display_ui:
-        layout = self.layout
-        row = layout.row()
-        col = row.column(align=True)
-        col.operator(LOOM_OT_render_dialog.bl_idname, icon="RENDER_ANIMATION")
-        if prefs.playblast_flag:
-            split = col.split(align=True, percentage=0.5)
-            split.operator(LOOM_OT_playblast.bl_idname, icon="PLAY", text="Playblast")
-            split.operator(LOOM_OT_encode_sequence.bl_idname, icon="FILE_MOVIE", text="Encode")
-        else:
-            col.operator(LOOM_OT_encode_sequence.bl_idname, icon="FILE_MOVIE", text="Encode Image Sequence")
-        row = layout.row(align=True)
-
 
 class LOOM_MT_render_menu(bpy.types.Menu):
     bl_label = "Loom"
@@ -3443,7 +3457,7 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         prefs = context.preferences.addons[__name__].preferences
         layout = self.layout
         layout.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #RENDER_ANIMATION
-        layout.operator(LOOM_OT_encode_sequence.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence")#FILE_MOVIE
+        layout.operator(LOOM_OT_encode_sequence.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence") #FILE_MOVIE
         layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode") #SEQ_LUMA_WAVEFORM
         layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
         layout.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Selected Markers")
@@ -3594,7 +3608,7 @@ def register():
             gvi.name = key
             gvi.prop = value
 
-    bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu)
+    bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu) # TOPBAR_MT_editor_menus
     bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
     bpy.types.RENDER_PT_output.append(draw_loom_output)
     
