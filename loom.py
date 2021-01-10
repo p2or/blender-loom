@@ -33,7 +33,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 7),
+    "version": (0, 7, 1),
     "blender": (2, 82, 0),
     "location": "Render Menu",
     "warning": "",
@@ -43,10 +43,208 @@ bl_info = {
     "category": "Render"
 }
 
+
+# -------------------------------------------------------------------
+#    Helper
+# -------------------------------------------------------------------
+
+def filter_frames(frame_input, increment=1, filter_individual=False):
+    """ Filter frame input & convert it to a set of frames """
+    def float_filter(st):
+        try:
+            return float(st)
+        except ValueError:
+            return None
+
+    def int_filter(flt):
+        try:
+            return int(flt) if flt.is_integer() else None
+        except ValueError:
+            return None
+
+    numeric_pattern = r"""
+        [\^\!]? \s*? # Exclude option
+        [-+]?        # Negative or positive number 
+        (?:
+            # Range & increment 1-2x2, 0.0-0.1x.02
+            (?: \d* \.? \d+ \s? \- \s? \d* \.? \d+ \s? [x%] \s? [-+]? \d* \.? \d+ )
+            |
+            # Range 1-2, 0.0-0.1 etc
+            (?: \d* \.? \d+ \s? \- \s? [-+]? \d* \.? \d+ )
+            |
+            # .1 .12 .123 etc 9.1 etc 98.1 etc
+            (?: \d* \. \d+ )
+            |
+            # 1. 12. 123. etc 1 12 123 etc
+            (?: \d+ \.? )
+        )
+        """
+    range_pattern = r"""
+        ([-+]? \d*? \.? [0-9]+ \b) # Start frame
+        (\s*? \- \s*?)             # Minus
+        ([-+]? \d* \.? [0-9]+)     # End frame
+        ( (\s*? [x%] \s*? )( [-+]? \d* \.? [0-9]+ \b ) )? # Increment
+        """
+    exclude_pattern = r"""
+        [\^\!] \s*?             # Exclude option
+        ([-+]? \d* \.? \d+)$    # Int or Float
+        """
+
+    rx_filter = re.compile(numeric_pattern, re.VERBOSE)
+    rx_group = re.compile(range_pattern, re.VERBOSE)
+    rx_exclude = re.compile(exclude_pattern, re.VERBOSE)
+
+    input_filtered = rx_filter.findall(frame_input)
+    if not input_filtered: return None
+
+    """ Option to add a ^ or ! at the beginning to exclude frames """
+    if not filter_individual:
+        first_exclude_item = next((i for i, v in enumerate(input_filtered) if "^" in v or "!" in v), None)
+        if first_exclude_item:
+            input_filtered = input_filtered[:first_exclude_item] + \
+                             [elem if elem.startswith(("^", "!")) else "^" + elem.lstrip(' ') \
+                              for elem in input_filtered[first_exclude_item:]]
+
+    """ Find single values as well as all ranges & compile frame list """
+    frame_list, exclude_list, conform_list  = [], [], []
+
+    conform_flag = False
+    for item in input_filtered:
+        frame = float_filter(item)
+        
+        if frame is not None: # Single floats
+            frame_list.append(frame)
+            if conform_flag: conform_list.append(frame)
+
+        else:  # Ranges & items to exclude
+            exclude_item = rx_exclude.search(item)
+            range_item = rx_group.search(item)
+
+            if exclude_item:  # Single exclude items like ^-3 or ^10
+                exclude_list.append(float_filter(exclude_item.group(1)))
+                if filter_individual: conform_flag = True
+
+            elif range_item:  # Ranges like 1-10, 20-10, 1-3x0.1, ^2-7 or ^-3--1
+                start = min(float_filter(range_item.group(1)), float_filter(range_item.group(3)))
+                end = max(float_filter(range_item.group(1)), float_filter(range_item.group(3)))
+                step = increment if not range_item.group(4) else float_filter(range_item.group(6))
+
+                if start < end:  # Build the range & add all items to list
+                    frame_range = around(arange(start, end, step), decimals=5).tolist()
+                    if item.startswith(("^", "!")):
+                        if filter_individual: conform_flag = True
+                        exclude_list.extend(frame_range)
+                        if isclose(step, (end - frame_range[-1])):
+                            exclude_list.append(end)
+                    else:
+                        frame_list.extend(frame_range)
+                        if isclose(step, (end - frame_range[-1])):
+                            frame_list.append(end)
+
+                        if conform_flag:
+                            conform_list.extend(frame_range)
+                            if isclose(step, (end - frame_range[-1])):
+                                conform_list.append(end)
+
+                elif start == end:  # Not a range, add start frame
+                    if not item.startswith(("^", "!")):
+                        frame_list.append(start)
+                    else:
+                        exclude_list.append(start)
+
+    if filter_individual:
+        exclude_list = sorted(set(exclude_list).difference(conform_list))
+    float_frames = sorted(set(frame_list).difference(exclude_list))
+
+    """ Return integers whenever possible """
+    int_frames = [int_filter(frame) for frame in float_frames]
+    return float_frames if None in int_frames else int_frames
+
+def isevaluable(s):
+    try:
+        eval(s)
+        return True
+    except:
+        return False
+
+
+def replace_globals(s, debug=False):
+    vars = bpy.context.preferences.addons[__name__].preferences.global_variable_coll
+    for key, val in vars.items():
+        if not debug:
+            if key.startswith("$") and not key.isspace():
+                if val.prop and not val.prop.isspace() and isevaluable(val.prop):
+                    s = s.replace(key, str(eval(val.prop)))
+        else:
+            print (key, val, val.prop)
+    return s
+
+
+def version_number(file_path, number, delimiter="_", min_lead=2):
+    """Replace or add a version string by given number"""
+    match = re.search(r'v(\d+)', file_path)
+    if match:
+        g = match.group(1)
+        n = str(int(number)).zfill(len(g))
+        return file_path.replace(match.group(0), "v{v}".format(v=n))
+
+    else:
+        lead_zeros = str(int(number)).zfill(min_lead)
+        version = "{dl}v{lz}{dl}".format(dl=delimiter, lz=lead_zeros)
+        ext = (".png",".jpg",".jpeg","jpg",".exr",".dpx",".tga",".tif",".tiff",".cin")
+
+        if "#" in file_path:
+            dash = file_path.find("#")
+            head, tail = file_path[:dash], file_path[dash:]
+            if head.endswith(delimiter):
+                head = head.rstrip(delimiter)
+            return "{h}{v}{t}".format(h=head, v=version, t=tail)
+
+        elif file_path.endswith(ext):
+            head, extension = os.path.splitext(file_path)
+            if head.endswith(delimiter):
+                head = head.rstrip(delimiter)
+            return "{fp}{v}{ex}".format(fp=head, v=version[:-1], ex=extension)
+
+        else:
+            if file_path.endswith(delimiter):
+                file_path = file_path.rstrip(delimiter)
+            return "{fp}{v}".format(fp=file_path, v=version)
+
+
+def render_version(self, context):
+    context.area.tag_redraw()
+    scene = context.scene
+    render = scene.render
+
+    # Replace the render path
+    render.filepath = version_number(
+            render.filepath, 
+            scene.loom.output_render_version)
+
+    # Replace file output
+    if not scene.render.use_compositing or \
+        not scene.loom.output_sync_comp or \
+        not scene.node_tree:
+        return
+
+    output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
+    for out_node in output_nodes:
+        if "LAYER" in out_node.format.file_format:
+            out_node.base_path = version_number(
+                out_node.base_path, 
+                scene.loom.output_render_version)
+        else:
+            for out_file in out_node.file_slots:
+                out_file.path = version_number(
+                    out_file.path, 
+                    scene.loom.output_render_version)
+    return None
+
+
 # -------------------------------------------------------------------
 #    Preferences & Scene Properties
 # -------------------------------------------------------------------
-
 
 class LoomGlobalsCollection(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
@@ -451,6 +649,17 @@ class LoomSettings(bpy.types.PropertyGroup):
         name="Batch Render Collection",
         type=LoomBatchRenderCollection)
 
+    output_render_version : bpy.props.IntProperty(
+        name = "Render Version",
+        description="Render Version",
+        default = 1, 
+        min = 1,
+        update = render_version)
+
+    output_sync_comp : bpy.props.BoolProperty(
+        name = "Sync Compositor",
+        description="Sync version string with File Output nodes",
+        default = True)
 
 # -------------------------------------------------------------------
 #    UI Operators
@@ -1134,8 +1343,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             row = layout.row()
             row.separator()
 
-        #if platform.startswith('win32'):
-        row = layout.row()
+        row = layout.row() #if platform.startswith('win32'):
         row.prop(self, "shutdown", text="Shutdown when done")
         row = layout.row()
 
@@ -2211,7 +2419,53 @@ class LOOM_OT_open_folder(bpy.types.Operator):
             self.report({'INFO'}, "No Folder")
         return {'FINISHED'}
 
+
+class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
+    """Remove version strings from File Output Nodes"""
+    bl_idname = "loom.remove_version_strings"
+    bl_label = "Remove Version Strings from File Output Nodes"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        space = context.space_data
+        return space.type == 'NODE_EDITOR'
+
+    def remove_version(self, fpath):
+        match = re.search(r'(v\d+)', fpath)
+        delimiters = ("-", "_", ".")
+        if match:
+            head, tail = fpath.split(match.group(0))
+            if tail.startswith(delimiters):
+                tail = tail[1:]
+            fpath = head + tail
+            return fpath[:-1] if fpath.endswith(delimiters) else fpath
+        else:
+            return fpath
+    
+    def execute(self, context):
+        scene = context.scene    
+        nodes = scene.node_tree.nodes
+        output_nodes = [n for n in nodes if n.type=='OUTPUT_FILE']
         
+        if not output_nodes:
+            self.report({'INFO'}, "Nothing to operate on")
+            return {'CANCELLED'}
+            
+        for out_node in output_nodes:
+            if "LAYER" in out_node.format.file_format:
+                out_node.base_path = self.remove_version(out_node.base_path)
+                for layer in out_node.layer_slots:
+                    layer.name = self.remove_version(layer.name)
+            else:
+                out_node.base_path = self.remove_version(out_node.base_path)
+                for out_file in out_node.file_slots:
+                    out_file.path = self.remove_version(out_file.path)
+            
+            scene.loom.output_sync_comp=False
+        return {'FINISHED'}
+
+
 class LOOM_OT_help(bpy.types.Operator):
     """Open up readme.md on github"""
     bl_idname = "loom.open_docs"
@@ -2739,7 +2993,7 @@ class LOOM_OT_playblast(bpy.types.Operator):
                 force_bash=False)
 
         else: 
-            """ Changes some scenes properties temporary... Bullshit!
+            """ Changes some scenes properties temporarily... Bullshit!
             However, the only way using the default operator at the moment """
             outfile = scn.render.filepath
             file_format = scn.render.image_settings.file_format
@@ -3311,141 +3565,6 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
 
 
 # -------------------------------------------------------------------
-#    Helper
-# -------------------------------------------------------------------
-
-def filter_frames(frame_input, increment=1, filter_individual=False):
-    """ Filter frame input & convert it to a set of frames """
-    def float_filter(st):
-        try:
-            return float(st)
-        except ValueError:
-            return None
-
-    def int_filter(flt):
-        try:
-            return int(flt) if flt.is_integer() else None
-        except ValueError:
-            return None
-
-    numeric_pattern = r"""
-        [\^\!]? \s*? # Exclude option
-        [-+]?        # Negative or positive number 
-        (?:
-            # Range & increment 1-2x2, 0.0-0.1x.02
-            (?: \d* \.? \d+ \s? \- \s? \d* \.? \d+ \s? [x%] \s? [-+]? \d* \.? \d+ )
-            |
-            # Range 1-2, 0.0-0.1 etc
-            (?: \d* \.? \d+ \s? \- \s? [-+]? \d* \.? \d+ )
-            |
-            # .1 .12 .123 etc 9.1 etc 98.1 etc
-            (?: \d* \. \d+ )
-            |
-            # 1. 12. 123. etc 1 12 123 etc
-            (?: \d+ \.? )
-        )
-        """
-    range_pattern = r"""
-        ([-+]? \d*? \.? [0-9]+ \b) # Start frame
-        (\s*? \- \s*?)             # Minus
-        ([-+]? \d* \.? [0-9]+)     # End frame
-        ( (\s*? [x%] \s*? )( [-+]? \d* \.? [0-9]+ \b ) )? # Increment
-        """
-    exclude_pattern = r"""
-        [\^\!] \s*?             # Exclude option
-        ([-+]? \d* \.? \d+)$    # Int or Float
-        """
-
-    rx_filter = re.compile(numeric_pattern, re.VERBOSE)
-    rx_group = re.compile(range_pattern, re.VERBOSE)
-    rx_exclude = re.compile(exclude_pattern, re.VERBOSE)
-
-    input_filtered = rx_filter.findall(frame_input)
-    if not input_filtered: return None
-
-    """ Option to add a ^ or ! at the beginning to exclude frames """
-    if not filter_individual:
-        first_exclude_item = next((i for i, v in enumerate(input_filtered) if "^" in v or "!" in v), None)
-        if first_exclude_item:
-            input_filtered = input_filtered[:first_exclude_item] + \
-                             [elem if elem.startswith(("^", "!")) else "^" + elem.lstrip(' ') \
-                              for elem in input_filtered[first_exclude_item:]]
-
-    """ Find single values as well as all ranges & compile frame list """
-    frame_list, exclude_list, conform_list  = [], [], []
-
-    conform_flag = False
-    for item in input_filtered:
-        frame = float_filter(item)
-        
-        if frame is not None: # Single floats
-            frame_list.append(frame)
-            if conform_flag: conform_list.append(frame)
-
-        else:  # Ranges & items to exclude
-            exclude_item = rx_exclude.search(item)
-            range_item = rx_group.search(item)
-
-            if exclude_item:  # Single exclude items like ^-3 or ^10
-                exclude_list.append(float_filter(exclude_item.group(1)))
-                if filter_individual: conform_flag = True
-
-            elif range_item:  # Ranges like 1-10, 20-10, 1-3x0.1, ^2-7 or ^-3--1
-                start = min(float_filter(range_item.group(1)), float_filter(range_item.group(3)))
-                end = max(float_filter(range_item.group(1)), float_filter(range_item.group(3)))
-                step = increment if not range_item.group(4) else float_filter(range_item.group(6))
-
-                if start < end:  # Build the range & add all items to list
-                    frame_range = around(arange(start, end, step), decimals=5).tolist()
-                    if item.startswith(("^", "!")):
-                        if filter_individual: conform_flag = True
-                        exclude_list.extend(frame_range)
-                        if isclose(step, (end - frame_range[-1])):
-                            exclude_list.append(end)
-                    else:
-                        frame_list.extend(frame_range)
-                        if isclose(step, (end - frame_range[-1])):
-                            frame_list.append(end)
-
-                        if conform_flag:
-                            conform_list.extend(frame_range)
-                            if isclose(step, (end - frame_range[-1])):
-                                conform_list.append(end)
-
-                elif start == end:  # Not a range, add start frame
-                    if not item.startswith(("^", "!")):
-                        frame_list.append(start)
-                    else:
-                        exclude_list.append(start)
-
-    if filter_individual:
-        exclude_list = sorted(set(exclude_list).difference(conform_list))
-    float_frames = sorted(set(frame_list).difference(exclude_list))
-
-    """ Return integers whenever possible """
-    int_frames = [int_filter(frame) for frame in float_frames]
-    return float_frames if None in int_frames else int_frames
-
-def isevaluable(s):
-    try:
-        eval(s)
-        return True
-    except:
-        return False
-
-def replace_globals(s, debug=False):
-    vars = bpy.context.preferences.addons[__name__].preferences.global_variable_coll
-    for key, val in vars.items():
-        if not debug:
-            if key.startswith("$") and not key.isspace():
-                if val.prop and not val.prop.isspace() and isevaluable(val.prop):
-                    s = s.replace(key, str(eval(val.prop)))
-        else:
-            print (key, val, val.prop)
-    return s
-
-
-# -------------------------------------------------------------------
 #    Panels and Menus
 # -------------------------------------------------------------------
 
@@ -3486,19 +3605,35 @@ def draw_loom_marker_menu(self, context):
     layout.menu(LOOM_MT_marker_menu.bl_idname)
 
 
-def draw_loom_output(self, context):
-    """Append Properties and Operators to the Output Area"""
+def draw_loom_version_number(self, context):
+    """Append Version Number Slider to the Output Area"""
+    if re.search("v\d+", context.scene.render.filepath) is not None:
+        layout = self.layout
+        row = layout.row(align=True)
+        row.prop(context.scene.loom, "output_render_version") #NODE_COMPOSITING
+        row.prop(context.scene.loom, "output_sync_comp", text="", toggle=True, icon="IMAGE_RGB_ALPHA") 
+        row.operator(LOOM_OT_open_folder.bl_idname, 
+                icon="DISK_DRIVE", text="").folder_path = os.path.dirname(context.scene.render.frame_path())
+        #layout.separator()
+
+def draw_loom_globals(self, context):
+    """Append compiled file path using globals to the Output Area"""
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
     output_folder, file_name = os.path.split(bpy.path.abspath(context.scene.render.filepath))
 
-    if any(ext in file_name for ext in glob_vars.keys()):
+    if any(ext in file_name for ext in glob_vars.keys()): # For now, file name only 
         layout = self.layout
         file_name = replace_globals(file_name)
         file_path = os.path.join(output_folder, file_name)
         custom_icon = "ERROR" if any(ext in file_path for ext in glob_vars.keys()) else "DISK_DRIVE"
 
         layout.separator()
-        layout.row().label(text="{}".format(file_path), icon=custom_icon)
+        row = layout.row()
+        row.operator(LOOM_OT_open_folder.bl_idname, 
+                icon="DISK_DRIVE", text="", emboss=False).folder_path = os.path.dirname(file_path)
+        row.label(text="{}".format(file_path))#, icon=custom_icon)
+        #row.prop(context.scene.loom, "compiled_path", emboss=False, icon=custom_icon)
+
 
 # -------------------------------------------------------------------
 #    Registration & Shortcuts
@@ -3568,7 +3703,8 @@ classes = (
     LOOM_MT_marker_menu,
     LOOM_OT_utils_marker_generate,
     LOOM_OT_utils_marker_rename,
-    LOOM_OT_utils_marker_unbind
+    LOOM_OT_utils_marker_unbind,
+    LOOM_OT_utils_node_cleanup
 )
 
 
@@ -3610,11 +3746,14 @@ def register():
 
     bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu) # TOPBAR_MT_editor_menus
     bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
-    bpy.types.RENDER_PT_output.append(draw_loom_output)
+    bpy.types.RENDER_PT_output.append(draw_loom_version_number)
+    bpy.types.RENDER_PT_output.append(draw_loom_globals)
+    
     
 
 def unregister():
-    bpy.types.RENDER_PT_output.remove(draw_loom_output)
+    bpy.types.RENDER_PT_output.remove(draw_loom_globals)
+    bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
     bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TOPBAR_MT_render.remove(draw_loom_render_menu)
     
