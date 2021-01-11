@@ -33,7 +33,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 7, 2),
+    "version": (0, 7, 5),
     "blender": (2, 82, 0),
     "location": "Render Menu",
     "warning": "",
@@ -160,25 +160,6 @@ def filter_frames(frame_input, increment=1, filter_individual=False):
     int_frames = [int_filter(frame) for frame in float_frames]
     return float_frames if None in int_frames else int_frames
 
-def isevaluable(s):
-    try:
-        eval(s)
-        return True
-    except:
-        return False
-
-
-def replace_globals(s, debug=False):
-    vars = bpy.context.preferences.addons[__name__].preferences.global_variable_coll
-    for key, val in vars.items():
-        if not debug:
-            if key.startswith("$") and not key.isspace():
-                if val.prop and not val.prop.isspace() and isevaluable(val.prop):
-                    s = s.replace(key, str(eval(val.prop)))
-        else:
-            print (key, val, val.prop)
-    return s
-
 
 def version_number(file_path, number, delimiter="_", min_lead=2):
     """Replace or add a version string by given number"""
@@ -217,12 +198,12 @@ def render_version(self, context):
     scene = context.scene
     render = scene.render
 
-    # Replace the render path
+    """ Replace the render path """
     render.filepath = version_number(
             render.filepath, 
             scene.loom.output_render_version)
 
-    # Replace file output
+    """ Replace file output """
     if not scene.render.use_compositing or \
         not scene.loom.output_sync_comp or \
         not scene.node_tree:
@@ -242,39 +223,69 @@ def render_version(self, context):
     return None
 
 
+def isevaluable(s):
+    try:
+        eval(s)
+        return True
+    except:
+        return False
+
+def replace_globals(s, debug=False):
+    """Replace string by given global entries"""
+    vars = bpy.context.preferences.addons[__name__].preferences.global_variable_coll
+    for key, val in vars.items():
+        if not debug:
+            if key.startswith("$") and not key.isspace():
+                if val.expr and not val.expr.isspace() and isevaluable(val.expr):
+                    s = s.replace(key, str(eval(val.expr)))
+        else: 
+            print (key, val, val.expr)
+    return s
+
+
+def verify_app(cmd):
+    try:
+        subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        if e.errno == errno.ENOENT:
+            return False
+    return True
+
 # -------------------------------------------------------------------
 #    Preferences & Scene Properties
 # -------------------------------------------------------------------
 
-class LoomGlobalsCollection(bpy.types.PropertyGroup):
+class LOOM_PG_globals(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
-    prop: bpy.props.StringProperty(name="Python Expression")
+    expr: bpy.props.StringProperty(name="Python Expression")
 
 class LOOM_UL_globals(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         split = layout.split(factor=0.2)
-        eval_icon = 'FILE_SCRIPT' if isevaluable(item.prop) else 'ERROR'
+        eval_icon = 'FILE_SCRIPT' if isevaluable(item.expr) else 'ERROR'
         var_icon = 'RADIOBUT_ON' if item.name.startswith("$") else 'RADIOBUT_OFF'
         split.prop(item, "name", text="", emboss=False, translate=False, icon=var_icon)
-        split.prop(item, "prop", text="", emboss=True, translate=False, icon=eval_icon)
+        split.prop(item, "expr", text="", emboss=True, translate=False, icon=eval_icon)
     def invoke(self, context, event):
         pass
 
 
-class LoomProjectDirectoryCollection(bpy.types.PropertyGroup):
+class LOOM_PG_project_directories(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
-    index: bpy.props.IntProperty() #prop_bool: bpy.props.BoolProperty()
+    creation_flag: bpy.props.BoolProperty()
 
 class LOOM_UL_directories(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         split = layout.split(factor=0.05)
-        split.label(text="{:02d}".format(item.index))
-        split.prop(item, "name", text="", icon='FILE_FOLDER') # emboss=False
+        split.label(text="{:02d}".format(index+1))
+        row = split.row(align=True)
+        row.prop(item, "name", text="", icon='FILE_FOLDER') # emboss=False
+        row.prop(item, "creation_flag", text="", icon='RADIOBUT_ON' if item.creation_flag else 'RADIOBUT_OFF')#, emboss=False)
     def invoke(self, context, event):
         pass
 
 
-class LoomPreferences(bpy.types.AddonPreferences):
+class LOOM_AP_preferences(bpy.types.AddonPreferences):
 
     bl_idname = __name__
 
@@ -313,6 +324,12 @@ class LoomPreferences(bpy.types.AddonPreferences):
         subtype='PIXEL',
         default=650, min=400)
 
+    project_dialog_width: bpy.props.IntProperty(
+        name="Project Dialog Width",
+        description = "Width of Project Dialog",
+        subtype='PIXEL',
+        default=650, min=400)
+
     log_render: bpy.props.BoolProperty(
         name="Logging (Required for Playback)",
         description="If enabled render output properties will be saved",
@@ -329,14 +346,9 @@ class LoomPreferences(bpy.types.AddonPreferences):
     
     user_player: bpy.props.BoolProperty(
         name="Default Animation Player",
-        description="Use default player (User Preferences > File > Animation Player)",
+        description="Use default player (User Preferences > File Paths)",
         default=False)
-    '''
-    display_ui: bpy.props.BoolProperty(
-        name="Display Loom Panel",
-        description = "Displays a new Panel in the Output Area",
-        default=False)
-    '''
+
     ffmpeg_path: bpy.props.StringProperty(
         name="FFmpeg Binary",
         description="Path to ffmpeg",
@@ -380,7 +392,7 @@ class LoomPreferences(bpy.types.AddonPreferences):
 
     global_variable_coll: bpy.props.CollectionProperty(
         name="Global Variables",
-        type=LoomGlobalsCollection)
+        type=LOOM_PG_globals)
     
     global_variable_idx: bpy.props.IntProperty(
         name="Index",
@@ -392,44 +404,58 @@ class LoomPreferences(bpy.types.AddonPreferences):
     
     project_directory_coll: bpy.props.CollectionProperty(
         name="Project Folders",
-        type=LoomProjectDirectoryCollection)
+        type=LOOM_PG_project_directories)
     
     project_coll_idx: bpy.props.IntProperty(
         name="Index",
         default=0)
 
-    display_general: bpy.props.BoolProperty(default=True)
-    display_globals: bpy.props.BoolProperty(default=False)
-    display_directories: bpy.props.BoolProperty(default=False)
-    display_advanced: bpy.props.BoolProperty(default=False)
-    display_hotkeys: bpy.props.BoolProperty(default=True)
+    display_general: bpy.props.BoolProperty(
+        default=True)
+
+    display_globals: bpy.props.BoolProperty(
+        default=False)
+
+    display_directories: bpy.props.BoolProperty(
+        default=False)
+
+    display_advanced: bpy.props.BoolProperty(
+        default=False)
+
+    display_hotkeys: bpy.props.BoolProperty(
+        default=True)
+
+    def draw_state(self, prop):
+        return 'RADIOBUT_OFF' if not prop else 'RADIOBUT_ON'
 
     def draw(self, context):
-        split_width = 0.4
+        split_width = 0.5
         layout = self.layout
 
         """ General """
-        box = layout.box()
-        row = box.row()
+        box_general = layout.box()
+        row = box_general.row()
         row.prop(self, "display_general",
             icon="TRIA_DOWN" if self.display_general else "TRIA_RIGHT",
             icon_only=True, emboss=False)
         row.label(text="General")
         
         if self.display_general:
-            split = box.split(factor=split_width)
+            split = box_general.split(factor=split_width)
             col = split.column()
-            #col.label(text="Path to FFmpeg Binary:") #prop(self, "display_ui")
-            col.prop(self, "playblast_flag")
-            up = col.column()
-            up.prop(self, "user_player")
-            up.enabled = self.playblast_flag
-            col = split.column()
-            #col.prop(self, "ffmpeg_path", text="")
-            col.prop(self, "render_dialog_width") 
-            col.prop(self, "encode_dialog_width")
+            col.prop(self, "render_dialog_width")
             col.prop(self, "batch_dialog_width")
             col.separator()
+            col.prop(self, "playblast_flag", toggle=True, icon=self.draw_state(self.playblast_flag))
+            col = col.column()
+            col = split.column()
+            col.prop(self, "project_dialog_width")
+            col.prop(self, "encode_dialog_width")
+            col.separator()
+            upl = col.column()
+            upl.prop(self, "user_player", toggle=True, icon=self.draw_state(self.user_player))
+            upl.enabled = self.playblast_flag
+            box_general.row()
 
         """ Globals """
         box_globals = layout.box()
@@ -450,8 +476,8 @@ class LoomPreferences(bpy.types.AddonPreferences):
                 active_propname = "global_variable_idx", 
                 rows=6)
             col = row.column(align=True)
-            col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='ADD', text="").action = 'ADD'
-            col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+            col.operator(LOOM_OT_globals_ui.bl_idname, icon='ADD', text="").action = 'ADD'
+            col.operator(LOOM_OT_globals_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
             col.separator()
             exp_box = box_globals.box()
             row = exp_box.row()
@@ -468,6 +494,7 @@ class LoomPreferences(bpy.types.AddonPreferences):
             split = row.split(factor=0.2)
             split.label(text="Result:", icon='FILE_VOLUME')
             split.label(text="{}".format(eval_info))
+            box_globals.row()
 
         """ Project Directories """
         box_dirs = layout.box()
@@ -488,9 +515,9 @@ class LoomPreferences(bpy.types.AddonPreferences):
                 active_propname = "project_coll_idx", 
                 rows=6)
             col = row.column(align=True)
-            col.operator(LOOM_OT_actions_directories_ui.bl_idname, icon='ADD', text="").action = 'ADD'
-            col.operator(LOOM_OT_actions_directories_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
-            col.separator()
+            col.operator(LOOM_OT_directories_ui.bl_idname, icon='ADD', text="").action = 'ADD'
+            col.operator(LOOM_OT_directories_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+            box_dirs.row()
 
         """ Advanced """
         box_advanced = layout.box()
@@ -501,31 +528,38 @@ class LoomPreferences(bpy.types.AddonPreferences):
         row.label(text="Advanced Settings")
         
         if self.display_advanced:
+            row = box_advanced.row()
+            row.prop(self, "ffmpeg_path")
+
             split = box_advanced.split(factor=split_width)
-            col = split.column()
-            col.label(text="Path to FFmpeg Binary:")
+            lft = split.column(align=True) # Left
+            fsh = lft.column(align=True)
             txt = "Force generating .bat file" if platform.startswith('win32') else "Force generating .sh file"
-            col_sub = col.column()
-            col_sub.prop(self, "bash_flag", text=txt)
-        
+            fsh.prop(self, "bash_flag", text=txt, toggle=True, icon=self.draw_state(self.bash_flag))
+    
+            rsh = lft.row(align=True)
+            txt = "Delete temporary .bat Files" if platform.startswith('win32') else "Delete temporary .sh files"
+            rsh.operator(LOOM_OT_delete_bash_files.bl_idname, text=txt, icon="FILE_SCRIPT")
+            script_folder = bpy.utils.script_path_user()
+            rsh.operator(LOOM_OT_open_folder.bl_idname, icon="DISK_DRIVE", text="").folder_path = script_folder
+
+            rgt = split.column(align=True) # Right
+            xtm = rgt.row(align=True)
+            xtm.prop(self, "xterm_flag", toggle=True, icon=self.draw_state(self.xterm_flag))
+            rbg = rgt.row(align=True)
+            rbg.prop(self, "render_background", toggle=True, icon=self.draw_state(self.render_background))
+            
+            """ Linux/OSX specific properties """
+            if platform.startswith('win32'):
+                rsh.enabled = False
+
             """ OSX specific properties """
             if platform.startswith('darwin'):
-                col_sub.enabled = False
-                col.prop(self, "render_background")
-                
-            """ Linux/OSX specific properties """
-            if not platform.startswith('win32'):
-                col.prop(self, "xterm_flag")
-
-            col = split.column()
-            col.prop(self, "ffmpeg_path", text="")
-            sub = col.row(align=True)
-            txt = "Delete temporary .bat Files" if platform.startswith('win32') else "Delete temporary .sh files"
-            sub.operator(LOOM_OT_delete_bash_files.bl_idname, text=txt, icon="FILE_SCRIPT")
-            script_folder = bpy.utils.script_path_user()
-            sub.operator(LOOM_OT_open_folder.bl_idname, icon="DISK_DRIVE", text="").folder_path = script_folder
-
-        """ Hotkey """
+                fsh.enabled = False
+                rbg.enabled = True
+            box_advanced.row()
+        
+        """ Hotkeys """
         box_hotkeys = layout.box()
         row = box_hotkeys.row()
         row.prop(self, "display_hotkeys",
@@ -548,13 +582,13 @@ class LoomPreferences(bpy.types.AddonPreferences):
                 if kmi_usr.idname.startswith("loom."):
                     col.context_pointer_set("keymap", km_usr)
                     rna_keymap_ui.draw_kmi([], kc_usr, km_usr, kmi_usr, col, 0)
-            row = layout.row()
+            box_hotkeys.row()
 
         """ Reset Prefs """
-        layout.operator(LOOM_OT_pref_reset.bl_idname, icon='FILE_REFRESH')
+        layout.operator(LOOM_OT_preferences_reset.bl_idname, icon='RECOVER_LAST')
 
 
-class LOOM_OT_pref_reset(bpy.types.Operator):
+class LOOM_OT_preferences_reset(bpy.types.Operator):
     """Reset Add-on Preferences"""
     bl_idname = "loom.reset_preferences"
     bl_label = "Reset Loom Preferences"
@@ -570,13 +604,13 @@ class LOOM_OT_pref_reset(bpy.types.Operator):
         for key, value in global_var_defaults.items():
             gvi = prefs.global_variable_coll.add()
             gvi.name = key
-            gvi.prop = value
+            gvi.expr = value
     
         """ Project Directories """
         for key, value in project_directories.items():
             di = prefs.project_directory_coll.add()
             di.name = value
-            di.index = key
+            di.creation_flag = True
 
         """ Restore default keys by keymap ids """
         kc_usr = context.window_manager.keyconfigs.user
@@ -589,7 +623,7 @@ class LOOM_OT_pref_reset(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class LOOM_OT_actions_global_ui(bpy.types.Operator):
+class LOOM_OT_globals_ui(bpy.types.Operator):
     """Move global variables up and down, add and remove"""
     bl_idname = "loom.globals_action"
     bl_label = "Global Actions"
@@ -625,7 +659,7 @@ class LOOM_OT_actions_global_ui(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class LOOM_OT_actions_directories_ui(bpy.types.Operator):
+class LOOM_OT_directories_ui(bpy.types.Operator):
     """Move global variables up and down, add and remove"""
     bl_idname = "loom.directory_action"
     bl_label = "Directory Actions"
@@ -653,12 +687,12 @@ class LOOM_OT_actions_directories_ui(bpy.types.Operator):
 
         if self.action == 'ADD':
             item = prefs.project_directory_coll.add()
-            item.index = len(prefs.project_directory_coll)
+            item.creation_flag = True
             prefs.project_coll_idx = len(prefs.project_directory_coll)-1
         return {"FINISHED"}
 
 
-class LoomRenderCollection(bpy.types.PropertyGroup):
+class LOOM_PG_render(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
     render_id: bpy.props.IntProperty()
     start_time: bpy.props.StringProperty()
@@ -669,7 +703,7 @@ class LoomRenderCollection(bpy.types.PropertyGroup):
     image_format: bpy.props.StringProperty()
 
 
-class LoomBatchRenderCollection(bpy.types.PropertyGroup):
+class LOOM_PG_batch_render(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
     rid: bpy.props.IntProperty()
     path: bpy.props.StringProperty()
@@ -681,7 +715,7 @@ class LoomBatchRenderCollection(bpy.types.PropertyGroup):
     input_filter: bpy.props.BoolProperty(default=False)
 
 
-class LoomSettings(bpy.types.PropertyGroup):
+class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
 
     frame_input: bpy.props.StringProperty(
         name="Frames to render",
@@ -725,7 +759,7 @@ class LoomSettings(bpy.types.PropertyGroup):
 
     render_collection: bpy.props.CollectionProperty(
         name="Render Collection",
-        type=LoomRenderCollection)
+        type=LOOM_PG_render)
 
     batch_scan_folder: bpy.props.StringProperty(
         name="Folder",
@@ -738,7 +772,7 @@ class LoomSettings(bpy.types.PropertyGroup):
        
     batch_render_coll: bpy.props.CollectionProperty(
         name="Batch Render Collection",
-        type=LoomBatchRenderCollection)
+        type=LOOM_PG_batch_render)
 
     output_render_version : bpy.props.IntProperty(
         name = "Render Version",
@@ -879,6 +913,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
 
         if not bpy.data.is_saved:
             self.report({'ERROR'}, "Blend-file not saved.")
+            bpy.ops.wm.save_as_mainfile('INVOKE_DEFAULT')
             user_error = True
         
         if not context.scene.camera:
@@ -930,7 +965,8 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         scn = context.scene
         lum = scn.loom
         prefs = context.preferences.addons[__name__].preferences
-        layout = self.layout  # layout.label(text="Render Image Sequence")
+        layout = self.layout  #layout.label(text="Render Image Sequence")
+        pref_view = context.preferences.view
 
         split = layout.split(factor=.17)
         col = split.column(align=True)
@@ -943,22 +979,20 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         #sub.prop(lum, "filter_keyframes", icon='SPACE2', icon_only=True)
         sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="") #SEQ_LUMA_WAVEFORM
 
-        # Display Mode seems gone
-        if getattr(scn.render, "display_mode", None):
-            split = layout.split(factor=.17)
-            col = split.column(align=True)
-            col.active = not lum.command_line
-            col.label(text="Display:")
-            col = split.column(align=True)
-            sub = col.row(align=True)
-            sub.active = not lum.command_line
-            sub.prop(scn.render, "display_mode", text="")
-            sub.prop(scn.render, "use_lock_interface", icon_only=True)
+        split = layout.split(factor=.17)
+        col = split.column(align=True)
+        col.active = not lum.command_line
+        col.label(text="Display:")
+        col = split.column(align=True)
+        sub = col.row(align=True)
+        sub.active = not lum.command_line
+        sub.prop(pref_view, "render_display_type", text="")
+        sub.prop(scn.render, "use_lock_interface", icon_only=True)
             
         row = layout.row(align=True)    
         row.prop(lum, "command_line", text="Render using Command Line")
         if scn.render.resolution_percentage < 100:
-            row.prop(self, "show_errors", text="", icon='SCRIPT' if self.show_errors else "REC", emboss=False)
+            row.prop(self, "show_errors", text="", icon='TEXT' if self.show_errors else "REC", emboss=False)
         else:
             row.operator(LOOM_OT_help.bl_idname, icon='HELP', text="", emboss=False)
             #row.prop(self, "show_errors", icon='SCRIPT' if self.selection else "HELP", text="", emboss=False)
@@ -970,14 +1004,13 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             thr_elem.active = bool(lum.command_line and lum.override_threads)
             thr_elem.prop(lum, "threads")
             thr_elem.operator(LOOM_OT_render_threads.bl_idname, icon='LOOP_BACK', text="")
-            #thr_elem.prop(lum, "extra_terminal", icon='CONSOLE', icon_only=True)
         
         if self.show_errors:
             res_percentage = scn.render.resolution_percentage
             if res_percentage < 100:
                 row = layout.row()
                 row.label(text="Warning: Resolution Percentage Scale is set to {}%".format(res_percentage))
-                row.operator(LOOM_OT_render_full_scale.bl_idname, icon="RECOVER_AUTO", text="", emboss=False)
+                row.operator(LOOM_OT_render_full_scale.bl_idname, icon="INDIRECT_ONLY_OFF", text="", emboss=False)
 
 
 class LOOM_OT_render_input_dialog(bpy.types.Operator):
@@ -1178,12 +1211,10 @@ class LOOM_UL_batch_list(bpy.types.UIList):
             split = layout.split(factor=prefs.batch_path_col_width, align=True)
             split_left = split.split(factor=0.08)
             split_left.label(text="{:02d}".format(index+1))
-            #split_left.prop(item, "path", text="", emboss=False, icon='FILE_BLEND')
             split_left.label(text=item.path, icon='FILE_BLEND')
         else:
             split = layout.split(factor=prefs.batch_name_col_width, align=True)
             split_left = split.split(factor=0.1)
-            #split_left.label(text="{:02d}".format(index+1))
             split_left.operator("loom.batch_default_frames", text="{:02d}".format(index+1), emboss=False).item_id = index
             split_left.label(text=item.name, icon='FILE_BLEND')
             
@@ -1194,7 +1225,6 @@ class LOOM_UL_batch_list(bpy.types.UIList):
         #row = split_right.row(align=True) #row.prop(item, "input_filter", text="", icon='FILTER')
         row.prop(item, "input_filter", text="", icon='FILTER')
         row.operator("loom.batch_verify_input", text="", icon='GHOST_ENABLED').item_id = index
-        #if prefs.ffmpeg_path:
         row.prop(item, "encode_flag", text="", icon='FILE_MOVIE')
 
     def invoke(self, context, event):
@@ -1360,7 +1390,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
                 python_expr = ("import bpy;" +\
                             "seq_path=bpy.context.scene.render.frame_path(frame=1);" +\
                             #"seq_path=bpy.context.scene.render.filepath;" +\
-                            "bpy.ops.loom.encode_sequence(" +\
+                            "bpy.ops.loom.encode_dialog(" +\
                             "sequence=seq_path, terminal_instance=False, pause=False)")
                 
                 cli_args = [bpy.app.binary_path, "-b", item.path, "--python-expr", python_expr]
@@ -1401,7 +1431,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             propname = "batch_render_coll", 
             active_dataptr = lum, 
             active_propname = "batch_render_idx", 
-            #rows=prefs.batch_dialog_rows
+            rows=prefs.batch_dialog_rows
         )
         
         col = row.column(align=True)
@@ -1450,9 +1480,7 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
     bl_label = "Select Blend Files"
     bl_description = "Select Blend Files in File Browser"
 
-    # ImportHelper mixin class uses this
     filename_ext = ".blend"
-
     filter_glob: bpy.props.StringProperty(
             default="*.blend",
             options={'HIDDEN'},
@@ -1638,7 +1666,7 @@ class LOOM_OT_batch_list_actions(bpy.types.Operator):
 
         if self.action == 'ADD':
             bpy.ops.loom.batch_select_blends('INVOKE_DEFAULT')       
-            lum.batch_render_idx = (len(lum.batch_render_coll))
+            lum.batch_render_idx = len(lum.batch_render_coll)
 
         return {"FINISHED"}
 
@@ -1745,7 +1773,7 @@ class LOOM_OT_batch_default_range(bpy.types.Operator):
     bl_options = {'INTERNAL'}
     
     item_id: bpy.props.IntProperty()
-    
+
     def execute(self, context):
         try:
             item = context.scene.loom.batch_render_coll[self.item_id]
@@ -1787,9 +1815,9 @@ class LOOM_OT_batch_verify_input(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class LOOM_OT_encode_sequence(bpy.types.Operator):
+class LOOM_OT_encode_dialog(bpy.types.Operator):
     """Encode Image Sequence to ProRes or DNxHD"""
-    bl_idname = "loom.encode_sequence"
+    bl_idname = "loom.encode_dialog"
     bl_label = "Encode Image Sequence"
     bl_description = "Encode Image Sequence"
     bl_options = {'REGISTER'}
@@ -1924,7 +1952,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
                 return {"CANCELLED"}
             else:
                 self.report({'ERROR'},error_message)
-                bpy.ops.loom.encode_sequence('INVOKE_DEFAULT')
+                bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
                 return {"CANCELLED"}
 
         #if not self.properties.is_property_set("sequence"): # call via commandline?
@@ -1937,7 +1965,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
             path_error = True
 
         if path_error:
-            bpy.ops.loom.encode_sequence('INVOKE_DEFAULT')
+            bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
         """ Verify image sequence """
@@ -1959,7 +1987,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
             seq_error = True
 
         if seq_error:
-            bpy.ops.loom.encode_sequence('INVOKE_DEFAULT')
+            bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
         hashes = filename_noext.count('#')
@@ -1973,7 +2001,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
 
         if not len(image_sequence) > 1:
             self.report({'WARNING'},"No valid image sequence")
-            bpy.ops.loom.encode_sequence('INVOKE_DEFAULT')
+            bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
         if not mov_path:
@@ -1984,14 +2012,6 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         mov_filename_noext, mov_extension = os.path.splitext(mov_filename)
         mov_extension = ".mov"
 
-        """ TODO
-        mov_num_suff = self.number_suffix(mov_filename_noext)
-        if mov_num_suff:
-            mov_filename_noext = mov_filename_noext.replace(mov_num_suff, "")
-
-        if mov_filename_noext.endswith(("-", "_", ".")):
-            mov_filename_noext = mov_filename_noext[:-1]
-        """
         mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
         if os.path.isfile(mov_path):
             from time import strftime
@@ -2015,7 +2035,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
                 self.report({'ERROR'},"Frame list copied to clipboard.")
                 context.window_manager.clipboard = "{}".format(
                     ','.join(map(str, missing_frame_list)))
-                bpy.ops.loom.encode_sequence('INVOKE_DEFAULT') # re-invoke the dialog
+                bpy.ops.loom.encode_dialog('INVOKE_DEFAULT') # re-invoke the dialog
                 return {"CANCELLED"}
         else:
             lum.lost_frames = ""
@@ -2077,7 +2097,7 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
             sub.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(lum.sequence_encode)
         else:
-            sub.operator(LOOM_OT_encode_auto_paths.bl_idname, text="", icon='AUTO') #GHOST #GHOST_ENABLED, SEQUENCE
+            sub.operator(LOOM_OT_encode_auto_paths.bl_idname, text="", icon='AUTO') #GHOST_ENABLED, SEQUENCE
         sel_sequence = sub.operator(LOOM_OT_load_image_sequence.bl_idname, text="", icon='FILE_TICK')
         sel_sequence.verify_sequence = False
 
@@ -2113,12 +2133,11 @@ class LOOM_OT_encode_sequence(bpy.types.Operator):
         if lum.lost_frames:
             row = layout.row()
             row = layout.row(align=True)
-            fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, icon='COPY_ID', text="Fill Gaps with Copies")
+            fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, icon='RENDER_RESULT', text="Fill Gaps with Copies")
             fg.sequence_path = lum.sequence_encode
             txt = "Render Missing Frames"
             di = row.operator(LOOM_OT_render_input_dialog.bl_idname, icon='RENDER_STILL', text=txt)
             di.frame_input = lum.lost_frames
-
         row = layout.row()
 
 
@@ -2172,7 +2191,7 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
         win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # x-100 y-+70
-        bpy.ops.loom.encode_sequence('INVOKE_DEFAULT') # re-invoke the dialog
+        bpy.ops.loom.encode_dialog('INVOKE_DEFAULT') # re-invoke the dialog
         
     @classmethod
     def poll(cls, context):
@@ -2276,7 +2295,7 @@ class LOOM_OT_encode_select_movie(bpy.types.Operator, ImportHelper):
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
         win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100)
-        bpy.ops.loom.encode_sequence('INVOKE_DEFAULT') # re-invoke the dialog
+        bpy.ops.loom.encode_dialog('INVOKE_DEFAULT') # re-invoke the dialog
         
     @classmethod
     def poll(cls, context):
@@ -2457,7 +2476,8 @@ class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
             return {"CANCELLED"}
 
         """ Detect missing frames """
-        frame_numbers = sorted(list(image_sequence.keys())) #start_frame, end_frame = fn[0], fn[-1]
+        frame_numbers = sorted(list(image_sequence.keys())) 
+        #start_frame, end_frame = fn[0], fn[-1]
         missing_frame_list = self.missing_frames(frame_numbers)
 
         """ Copy images """
@@ -2516,6 +2536,19 @@ class LOOM_OT_open_folder(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class LOOM_OT_open_output_folder(bpy.types.Operator):
+    """Opens up the output folder in the File Browser"""
+    bl_idname = "loom.open_ouput_dir"
+    bl_label = "Open Output Directory"
+    bl_description = "Open up the Output Directory in the File Browser"
+    bl_options = {'REGISTER'}
+    
+    def execute(self, context):
+        p = os.path.dirname(bpy.path.abspath(bpy.context.scene.render.filepath))
+        bpy.ops.loom.open_folder(folder_path=p)
+        return {'FINISHED'}
+
+
 class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
     """Remove version strings from File Output Nodes"""
     bl_idname = "loom.remove_version_strings"
@@ -2562,6 +2595,17 @@ class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class LOOM_OT_open_preferences(bpy.types.Operator):
+    """Loom Preferences Window"""
+    bl_idname = "loom.open_preferences"
+    bl_label = "Loom Preferences"
+    bl_options = {'INTERNAL'}
+
+    def execute(self, context):
+        bpy.ops.preferences.addon_show(module="loom")
+        return {'FINISHED'}
+        
+        
 class LOOM_OT_help(bpy.types.Operator):
     """Open up readme.md on github"""
     bl_idname = "loom.open_docs"
@@ -2704,7 +2748,6 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         self._rendered_frames.pop()
 
     def post_render(self, scene, depsgraph):
-        #lum.latest_render = scene.render.filepath
         self._frames.pop(0)
         self._rendering = False
         
@@ -2776,7 +2819,8 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         else:
             scene.frame_set(frame_number)
             ff = self.format_frame(self._filename, frame_number, self._extension)
-        # Final main path assembly
+        
+        """ Final main path assembly """
         scene.render.filepath = os.path.join(self._folder, ff)
                 
         for k, v in self._output_nodes.items():
@@ -2794,7 +2838,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 else:
                     #of = self.format_frame(v["Filename"], frame_number)
                     of = replace_globals(v["Filename"])
-                # Final output node path assembly
+                """ Final output node path assembly """
                 k.base_path = os.path.join(replace_globals(v["Folder"]), of)
 
     def start_render(self, scene, frame, silent=False):
@@ -3176,11 +3220,11 @@ class LOOM_OT_verify_terminal(bpy.types.Operator):
                 self.report({'INFO'}, "Terminal not supported.")
 
         self.report({'INFO'}, "Terminal is '{}'".format(prefs.terminal))
-        bpy.ops.wm.save_userpref()
+        #bpy.ops.wm.save_userpref()
         return {'FINISHED'}
 
 
-class LoomGenericArgumentCollection(bpy.types.PropertyGroup):
+class LOOM_PG_generic_arguments(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
     value: bpy.props.StringProperty()
     idc: bpy.props.IntProperty()
@@ -3206,7 +3250,7 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
     argument_collection: bpy.props.CollectionProperty(
         name="Command Line Arguments",
         description="Allows passing a dictionary",
-        type=LoomGenericArgumentCollection)
+        type=LOOM_PG_generic_arguments)
 
     debug_arguments: bpy.props.BoolProperty(
         name="Debug Arguments",
@@ -3285,25 +3329,25 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
             if isinstance(bash_args[0], list):
                 bash_args = [[self.binary] + i if self.binary else i for i in bash_args]
 
-                # Add quotes to python command
+                """ Add quotes to python command """
                 bash_args = [["{b}{e}{b}".format(b='\"', e=x) \
                     if x.startswith("import") else x for x in args] for args in bash_args]
-                # Add quotes to blend file path
+                """ Add quotes to blend file path """
                 bash_args = [["{b}{e}{b}".format(b='\"', e=x) \
                     if x.endswith(".blend") else x for x in args] for args in bash_args]
-                # Write the the file
+                """ Write the the file """
                 for i in bash_args:
                     fp.write(" ".join(i) + "\n")
             else:
                 bash_args = [self.binary] + bash_args if self.binary else bash_args
 
-                # Add quotes to python command
+                """ Add quotes to python command """
                 bash_args = ["{b}{e}{b}".format(b='\"', e=x) \
                     if x.startswith("import") else x for x in bash_args]
-                # Add quotes to blend file path
+                """ Add quotes to blend file path """
                 bash_args = ["{b}{e}{b}".format(b='\"', e=x) \
                     if x.endswith(".blend") else x for x in bash_args]
-                # Write the the file
+                """ Write the the file """
                 fp.write(" ".join(bash_args) + "\n")
             
             if self.pause: # https://stackoverflow.com/a/17778773
@@ -3356,7 +3400,7 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
             ext = ".bat" if prefs.terminal == 'win-default' else ".sh"
             prefs.bash_file = os.path.join(addon_folder, "{}{}".format(self.bash_name, ext))
         
-        # Allow command stacking
+        """ Allow command stacking """
         if len(args_user) > 1 and not self.communicate:
             self.force_bash = True
 
@@ -3513,7 +3557,7 @@ class LOOM_OT_utils_create_directory(bpy.types.Operator):
             self.report({'WARNING'},"No directory specified")
             return {'CANCELLED'}
         
-        abs_path = bpy.path.abspath(self.directory).rstrip('/').rstrip('\\') # Dirty!
+        abs_path = bpy.path.abspath(self.directory).rstrip('/').rstrip('\\')
         head, tail = os.path.split(abs_path)
         if not os.path.isdir(head):
             self.report({'WARNING'},"Access denied: '{}' does not exists".format(head))
@@ -3555,8 +3599,7 @@ class LOOM_OT_utils_marker_rename(bpy.types.Operator):
     
     new_name: bpy.props.StringProperty(
         name="New Name",
-        default="$SCENE_$LENS_$F4_###"
-        )
+        default="$SCENE_$LENS_$F4_###")
     
     @classmethod
     def poll(cls, context):
@@ -3570,7 +3613,7 @@ class LOOM_OT_utils_marker_rename(bpy.types.Operator):
             frame_flag = False
             marker_name = self.new_name
             if "$" in marker_name:
-                context.scene.frame_set(m.frame) # todo
+                context.scene.frame_set(m.frame)
                 marker_name = replace_globals(marker_name)
                 frame_flag = True
             if "#" in marker_name:
@@ -3670,7 +3713,6 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
         scn = context.scene        
         layout = self.layout
         layout.separator()
-
         row = layout.row()
         split = row.split(factor=0.9, align=True)
         c = split.column(align=True)
@@ -3717,10 +3759,10 @@ class LOOM_OT_select_project_directory(bpy.types.Operator, ExportHelper):
         return {'FINISHED'}
 
 
-class LOOM_OT_set_project(bpy.types.Operator):
+class LOOM_OT_project_dialog(bpy.types.Operator):
     """Loom — Set Project Dialog"""
     bl_idname = "loom.set_project_dialog"
-    bl_label = "Set Project Directory"
+    bl_label = "Setup Project Directory"
     bl_options = {'REGISTER'}
 
     directory: bpy.props.StringProperty(name="Project Directory")
@@ -3732,19 +3774,28 @@ class LOOM_OT_set_project(bpy.types.Operator):
     def execute(self, context):
         scn = context.scene
         lum = scn.loom
-        
+
+        if not bpy.data.is_saved:
+            self.report({'ERROR'}, "Blend-file not saved.")
+            bpy.ops.wm.save_as_mainfile('INVOKE_DEFAULT')
+            return {'CANCELLED'}
+
         if not self.directory or not os.path.isdir(self.directory):
             self.report({'ERROR'}, "Please specify a valid Project Directory")
+            bpy.ops.loom.set_project_dialog('INVOKE_DEFAULT')
             return {'CANCELLED'}
 
         errors = []
         prefs = context.preferences.addons[__name__].preferences
-        for i in prefs.project_directory_coll:
-            pdir = os.path.join(self.directory, i.name)
-            bpy.ops.loom.create_directory(directory=pdir)
-            if not os.path.isdir(bpy.path.abspath(pdir)):
-                errors.append(i.name)
-        
+        for d in prefs.project_directory_coll:
+            if d.creation_flag and d.name:
+                pdir = os.path.join(self.directory, d.name)
+                bpy.ops.loom.create_directory(directory=pdir)
+                if not os.path.isdir(bpy.path.abspath(pdir)):
+                    errors.append(d.name)
+                if any(x in d.name.lower() for x in ["rndr", "render"]):
+                    if os.path.isdir(bpy.path.abspath(pdir)):
+                        scn.render.filepath = bpy.path.relpath(pdir) + "/"
         if not errors:
             self.report({'INFO'}, "All directories successfully created")
         else:
@@ -3760,7 +3811,7 @@ class LOOM_OT_set_project(bpy.types.Operator):
         if not context.scene.loom.project_directory:
             lum.project_directory = bpy.path.abspath('//')
         self.directory = lum.project_directory
-        return context.window_manager.invoke_props_dialog(self, width=(600))
+        return context.window_manager.invoke_props_dialog(self, width=prefs.project_dialog_width)
 
     def check(self, context):
         return True
@@ -3782,8 +3833,8 @@ class LOOM_OT_set_project(bpy.types.Operator):
             rows=6)
         
         col = row.column(align=True)
-        col.operator(LOOM_OT_actions_directories_ui.bl_idname, icon='ADD', text="").action = 'ADD'
-        col.operator(LOOM_OT_actions_directories_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+        col.operator(LOOM_OT_directories_ui.bl_idname, icon='ADD', text="").action = 'ADD'
+        col.operator(LOOM_OT_directories_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
         layout.separator()
         row = layout.row(align=True)
         row.prop(self, "directory")
@@ -3803,12 +3854,17 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         prefs = context.preferences.addons[__name__].preferences
         layout = self.layout
         layout.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #RENDER_ANIMATION
-        layout.operator(LOOM_OT_encode_sequence.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence") #FILE_MOVIE
         layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode") #SEQ_LUMA_WAVEFORM
-        layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
-        layout.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Selected Markers")
+        layout.operator(LOOM_OT_encode_dialog.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence") #FILE_MOVIE
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
+        layout.separator()
+        layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
+        layout.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Selected Markers")
+        layout.separator()
+        #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
+        layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
+        layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
 
 def draw_loom_render_menu(self, context):
     layout = self.layout
@@ -3843,6 +3899,7 @@ def draw_loom_version_number(self, context):
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(context.scene.render.frame_path())
         #layout.separator()
 
+
 def draw_loom_globals(self, context):
     """Append compiled file path using globals to the Output Area"""
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
@@ -3853,19 +3910,18 @@ def draw_loom_globals(self, context):
         file_name = replace_globals(file_name)
         file_path = os.path.join(output_folder, file_name)
         custom_icon = "ERROR" if any(ext in file_path for ext in glob_vars.keys()) else "DISK_DRIVE"
-
         layout.separator()
         row = layout.row()
         row.operator(LOOM_OT_open_folder.bl_idname, 
-                icon="DISK_DRIVE", text="", emboss=False).folder_path = os.path.dirname(file_path)
-        row.label(text="{}".format(file_path))#, icon=custom_icon)
-        #row.prop(context.scene.loom, "compiled_path", emboss=False, icon=custom_icon)
+                icon=custom_icon, text="", emboss=False).folder_path = os.path.dirname(file_path)
+        row.label(text="{}".format(file_path))
 
 
 def draw_loom_project(self, context):
+    """Append project dialog to app settings"""
     layout = self.layout
     layout.separator()
-    layout.operator(LOOM_OT_set_project.bl_idname, icon="OUTLINER") #PRESET
+    layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
 
 
 # -------------------------------------------------------------------
@@ -3895,17 +3951,17 @@ project_directories = {
 }
 
 classes = (
-    LoomRenderCollection,
-    LoomBatchRenderCollection,
-    LoomGlobalsCollection,
+    LOOM_PG_globals,
     LOOM_UL_globals,
-    LoomProjectDirectoryCollection,
+    LOOM_PG_project_directories,
     LOOM_UL_directories,
-    LoomSettings,
-    LoomPreferences,
-    LOOM_OT_pref_reset,
-    LOOM_OT_actions_global_ui,
-    LOOM_OT_actions_directories_ui,
+    LOOM_AP_preferences,
+    LOOM_OT_preferences_reset,
+    LOOM_OT_globals_ui,
+    LOOM_OT_directories_ui,
+    LOOM_PG_render,
+    LOOM_PG_batch_render,
+    LOOM_PG_scene_settings,
     LOOM_OT_render_threads,
     LOOM_OT_render_full_scale,
     LOOM_OT_timeline_props,
@@ -3926,60 +3982,70 @@ classes = (
     LOOM_OT_batch_active_item,
     LOOM_OT_batch_default_range,
     LOOM_OT_batch_verify_input,
-    LOOM_OT_encode_sequence,
+    LOOM_OT_encode_dialog,
     LOOM_OT_load_image_sequence,
     LOOM_OT_encode_select_movie,
     LOOM_OT_encode_verify_image_sequence,
     LOOM_OT_encode_auto_paths,
     LOOM_OT_fill_sequence_gaps,
     LOOM_OT_open_folder,
+    LOOM_OT_open_output_folder,
     LOOM_OT_utils_node_cleanup,
+    LOOM_OT_open_preferences,
     LOOM_OT_help,
     LOOM_OT_render_terminal,
     LOOM_OT_render_image_sequence,
     LOOM_OT_playblast,
     LOOM_OT_clear_dialog,
     LOOM_OT_verify_terminal,
-    LoomGenericArgumentCollection,
+    LOOM_PG_generic_arguments,
     LOOM_OT_run_terminal,
     LOOM_OT_delete_bash_files,
     LOOM_OT_delete_file,
     LOOM_OT_utils_create_directory,
-    LOOM_MT_render_menu,
-    LOOM_MT_marker_menu,
-    LOOM_OT_utils_marker_generate,
-    LOOM_OT_utils_marker_rename,
     LOOM_OT_utils_marker_unbind,
+    LOOM_OT_utils_marker_rename,
+    LOOM_OT_utils_marker_generate,
     LOOM_OT_select_project_directory,
-    LOOM_OT_set_project
+    LOOM_OT_project_dialog,
+    LOOM_MT_render_menu,
+    LOOM_MT_marker_menu
 )
 
 
 def register():
-
     from bpy.utils import register_class
     for cls in classes:
         register_class(cls)
 
-    bpy.types.Scene.loom = bpy.props.PointerProperty(type=LoomSettings)
+    bpy.types.Scene.loom = bpy.props.PointerProperty(type=LOOM_PG_scene_settings)
 
     """ Hotkey registration """
     kc = bpy.context.window_manager.keyconfigs.addon
     if kc:
         km = kc.keymaps.new(name="Screen", space_type='EMPTY')
-
         if bpy.context.preferences.addons[__name__].preferences.playblast_flag:
-            kmi = km.keymap_items.new("loom.playblast", 'F11', 'PRESS', ctrl=True, shift=True)
+            kmi = km.keymap_items.new(LOOM_OT_playblast.bl_idname, 'F11', 'PRESS', ctrl=True, shift=True)
             kmi.active = True
             addon_keymaps.append((km, kmi))
 
-        kmi = km.keymap_items.new("loom.encode_sequence", 'F9', 'PRESS', ctrl=True, shift=True)
+        kmi = km.keymap_items.new(LOOM_OT_open_output_folder.bl_idname, 'F3', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
-        kmi = km.keymap_items.new("loom.batch_render_dialog", 'F12', 'PRESS', ctrl=True, shift=True, alt=True)
+
+        kmi = km.keymap_items.new(LOOM_OT_project_dialog.bl_idname, 'F1', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
-        kmi = km.keymap_items.new("loom.render_dialog", 'F12', 'PRESS', ctrl=True, shift=True)
+
+        kmi = km.keymap_items.new(LOOM_OT_encode_dialog.bl_idname, 'F9', 'PRESS', ctrl=True, shift=True)
+        kmi.active = True
+        addon_keymaps.append((km, kmi))
+
+        kmi = km.keymap_items.new(LOOM_OT_batch_dialog.bl_idname, 'F12', 'PRESS', ctrl=True, shift=True, alt=True)
+        kmi.active = True
+        addon_keymaps.append((km, kmi))
+
+        kmi = km.keymap_items.new(LOOM_OT_render_dialog.bl_idname, 'F12', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
 
@@ -3989,7 +4055,7 @@ def register():
         for key, value in global_var_defaults.items():
             gvi = glob.add()
             gvi.name = key
-            gvi.prop = value
+            gvi.expr = value
     
     """ Project Directories """
     dirs = bpy.context.preferences.addons[__name__].preferences.project_directory_coll
@@ -3997,14 +4063,14 @@ def register():
         for key, value in project_directories.items():
             di = dirs.add()
             di.name = value
-            di.index = key
+            di.creation_flag = True
 
     """ Menus """
     bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu) # TOPBAR_MT_editor_menus
     bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_globals)
-    bpy.types.TOPBAR_MT_app.append(draw_loom_project) # TOPBAR_MT_edit
+    bpy.types.TOPBAR_MT_app.append(draw_loom_project)
     
 
 def unregister():
