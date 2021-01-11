@@ -23,7 +23,7 @@ import errno
 import subprocess
 import blend_render_info
 from sys import platform
-from bpy_extras.io_utils import ImportHelper
+from bpy_extras.io_utils import ImportHelper, ExportHelper
 from numpy import arange, around, isclose
 from itertools import count, groupby
 import rna_keymap_ui
@@ -33,7 +33,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 7, 1),
+    "version": (0, 7, 2),
     "blender": (2, 82, 0),
     "location": "Render Menu",
     "warning": "",
@@ -261,6 +261,19 @@ class LOOM_UL_globals(bpy.types.UIList):
         pass
 
 
+class LoomProjectDirectoryCollection(bpy.types.PropertyGroup):
+    # name: bpy.props.StringProperty()
+    index: bpy.props.IntProperty() #prop_bool: bpy.props.BoolProperty()
+
+class LOOM_UL_directories(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        split = layout.split(factor=0.05)
+        split.label(text="{:02d}".format(item.index))
+        split.prop(item, "name", text="", icon='FILE_FOLDER') # emboss=False
+    def invoke(self, context, event):
+        pass
+
+
 class LoomPreferences(bpy.types.AddonPreferences):
 
     bl_idname = __name__
@@ -377,28 +390,48 @@ class LoomPreferences(bpy.types.AddonPreferences):
         name="Expression",
         description = "Test Expression")
     
+    project_directory_coll: bpy.props.CollectionProperty(
+        name="Project Folders",
+        type=LoomProjectDirectoryCollection)
+    
+    project_coll_idx: bpy.props.IntProperty(
+        name="Index",
+        default=0)
+
+    display_general: bpy.props.BoolProperty(default=True)
     display_globals: bpy.props.BoolProperty(default=False)
+    display_directories: bpy.props.BoolProperty(default=False)
     display_advanced: bpy.props.BoolProperty(default=False)
-    display_hotkeys: bpy.props.BoolProperty(default=False)
+    display_hotkeys: bpy.props.BoolProperty(default=True)
 
     def draw(self, context):
         split_width = 0.4
         layout = self.layout
-        box = layout.box()
-        split = box.split(factor=split_width)
-        col = split.column()
-        #col.label(text="Path to FFmpeg Binary:") #prop(self, "display_ui")
-        col.prop(self, "playblast_flag")
-        up = col.column()
-        up.prop(self, "user_player")
-        up.enabled = self.playblast_flag
-        col = split.column()
-        #col.prop(self, "ffmpeg_path", text="")
-        col.prop(self, "render_dialog_width") 
-        col.prop(self, "encode_dialog_width")
-        col.prop(self, "batch_dialog_width")
 
-        """ Globals box """
+        """ General """
+        box = layout.box()
+        row = box.row()
+        row.prop(self, "display_general",
+            icon="TRIA_DOWN" if self.display_general else "TRIA_RIGHT",
+            icon_only=True, emboss=False)
+        row.label(text="General")
+        
+        if self.display_general:
+            split = box.split(factor=split_width)
+            col = split.column()
+            #col.label(text="Path to FFmpeg Binary:") #prop(self, "display_ui")
+            col.prop(self, "playblast_flag")
+            up = col.column()
+            up.prop(self, "user_player")
+            up.enabled = self.playblast_flag
+            col = split.column()
+            #col.prop(self, "ffmpeg_path", text="")
+            col.prop(self, "render_dialog_width") 
+            col.prop(self, "encode_dialog_width")
+            col.prop(self, "batch_dialog_width")
+            col.separator()
+
+        """ Globals """
         box_globals = layout.box()
         row = box_globals.row()
         row.prop(self, "display_globals",
@@ -408,7 +441,14 @@ class LoomPreferences(bpy.types.AddonPreferences):
 
         if self.display_globals:
             row = box_globals.row()
-            row.template_list("LOOM_UL_globals", "", self, "global_variable_coll", self, "global_variable_idx", rows=6)
+            row.template_list(
+                listtype_name = "LOOM_UL_globals", 
+                list_id = "", 
+                dataptr = self, 
+                propname = "global_variable_coll", 
+                active_dataptr = self, 
+                active_propname = "global_variable_idx", 
+                rows=6)
             col = row.column(align=True)
             col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='ADD', text="").action = 'ADD'
             col.operator(LOOM_OT_actions_global_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
@@ -429,32 +469,30 @@ class LoomPreferences(bpy.types.AddonPreferences):
             split.label(text="Result:", icon='FILE_VOLUME')
             split.label(text="{}".format(eval_info))
 
-        """ Hotkey box """
-        box_hotkeys = layout.box()
-        row = box_hotkeys.row()
-        row.prop(self, "display_hotkeys",
-            icon="TRIA_DOWN" if self.display_hotkeys else "TRIA_RIGHT",
+        """ Project Directories """
+        box_dirs = layout.box()
+        row = box_dirs.row()
+        row.prop(self, "display_directories",
+            icon="TRIA_DOWN" if self.display_directories else "TRIA_RIGHT",
             icon_only=True, emboss=False)
-        row.label(text="Hotkeys")
+        row.label(text="Project Directories")
 
-        if self.display_hotkeys:
-            split = box_hotkeys.split()
-            col = split.column()
-            kc_usr = bpy.context.window_manager.keyconfigs.user
-            km_usr = kc_usr.keymaps.get('Screen')
+        if self.display_directories:
+            row = box_dirs.row()
+            row.template_list(
+                listtype_name = "LOOM_UL_directories", 
+                list_id = "", 
+                dataptr = self, 
+                propname = "project_directory_coll", 
+                active_dataptr = self, 
+                active_propname = "project_coll_idx", 
+                rows=6)
+            col = row.column(align=True)
+            col.operator(LOOM_OT_actions_directories_ui.bl_idname, icon='ADD', text="").action = 'ADD'
+            col.operator(LOOM_OT_actions_directories_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+            col.separator()
 
-            if not user_keymap_ids: # Ouch, Todo!
-                for kmi_usr in km_usr.keymap_items:
-                    for km_addon, kmi_addon in addon_keymaps:
-                        if kmi_addon.compare(kmi_usr):
-                            user_keymap_ids.append(kmi_usr.id)
-            for kmi_usr in km_usr.keymap_items: # user hotkeys by namespace
-                if kmi_usr.idname.startswith("loom."):
-                    col.context_pointer_set("keymap", km_usr)
-                    rna_keymap_ui.draw_kmi([], kc_usr, km_usr, kmi_usr, col, 0)
-            row = layout.row()
-
-        """ Advanced box """
+        """ Advanced """
         box_advanced = layout.box()
         row = box_advanced.row()
         row.prop(self, "display_advanced",
@@ -487,6 +525,31 @@ class LoomPreferences(bpy.types.AddonPreferences):
             script_folder = bpy.utils.script_path_user()
             sub.operator(LOOM_OT_open_folder.bl_idname, icon="DISK_DRIVE", text="").folder_path = script_folder
 
+        """ Hotkey """
+        box_hotkeys = layout.box()
+        row = box_hotkeys.row()
+        row.prop(self, "display_hotkeys",
+            icon="TRIA_DOWN" if self.display_hotkeys else "TRIA_RIGHT",
+            icon_only=True, emboss=False)
+        row.label(text="Hotkeys")
+
+        if self.display_hotkeys:
+            split = box_hotkeys.split()
+            col = split.column()
+            kc_usr = bpy.context.window_manager.keyconfigs.user
+            km_usr = kc_usr.keymaps.get('Screen')
+
+            if not user_keymap_ids: # Ouch, Todo!
+                for kmi_usr in km_usr.keymap_items:
+                    for km_addon, kmi_addon in addon_keymaps:
+                        if kmi_addon.compare(kmi_usr):
+                            user_keymap_ids.append(kmi_usr.id)
+            for kmi_usr in km_usr.keymap_items: # user hotkeys by namespace
+                if kmi_usr.idname.startswith("loom."):
+                    col.context_pointer_set("keymap", km_usr)
+                    rna_keymap_ui.draw_kmi([], kc_usr, km_usr, kmi_usr, col, 0)
+            row = layout.row()
+
         """ Reset Prefs """
         layout.operator(LOOM_OT_pref_reset.bl_idname, icon='FILE_REFRESH')
 
@@ -499,25 +562,21 @@ class LOOM_OT_pref_reset(bpy.types.Operator):
 
     def execute(self, context):
         prefs = context.preferences.addons[__name__].preferences
-        prefs.property_unset("terminal")
-        prefs.property_unset("xterm_flag")
-        prefs.property_unset("render_dialog_width")
-        prefs.property_unset("encode_dialog_width")
-        prefs.property_unset("bash_flag")
-        prefs.property_unset("bash_file")
-        #prefs.property_unset("display_ui")
-        prefs.property_unset("user_player")
-        prefs.property_unset("log_render")
-        prefs.property_unset("log_render_limit")
-        prefs.property_unset("default_codec")
-        prefs.property_unset("playblast_flag")
+        props = prefs.__annotations__.keys()
+        for p in props:
+            prefs.property_unset(p)
 
         """ Restore Globals """
-        prefs.global_variable_coll.clear()
         for key, value in global_var_defaults.items():
             gvi = prefs.global_variable_coll.add()
             gvi.name = key
             gvi.prop = value
+    
+        """ Project Directories """
+        for key, value in project_directories.items():
+            di = prefs.project_directory_coll.add()
+            di.name = value
+            di.index = key
 
         """ Restore default keys by keymap ids """
         kc_usr = context.window_manager.keyconfigs.user
@@ -540,13 +599,11 @@ class LOOM_OT_actions_global_ui(bpy.types.Operator):
     action: bpy.props.EnumProperty(
         items=(
             ('REMOVE', "Remove", ""),
-            ('ADD', "Add", ""))
-        )
+            ('ADD', "Add", "")))
 
     def invoke(self, context, event):
         prefs = context.preferences.addons[__name__].preferences
         idx = prefs.global_variable_idx
-
         try:
             item = prefs.global_variable_coll[idx]
         except IndexError:
@@ -556,6 +613,7 @@ class LOOM_OT_actions_global_ui(bpy.types.Operator):
                 info = 'Item "%s" removed from list' % (prefs.global_variable_coll[idx].name)
                 prefs.global_variable_idx -= 1
                 prefs.global_variable_coll.remove(idx)
+                if prefs.global_variable_idx < 0: prefs.global_variable_idx = 0
                 self.report({'INFO'}, info)
 
         if self.action == 'ADD':
@@ -564,6 +622,39 @@ class LOOM_OT_actions_global_ui(bpy.types.Operator):
             info = '"%s" added to list' % (item.name)
             self.report({'INFO'}, info)
 
+        return {"FINISHED"}
+
+
+class LOOM_OT_actions_directories_ui(bpy.types.Operator):
+    """Move global variables up and down, add and remove"""
+    bl_idname = "loom.directory_action"
+    bl_label = "Directory Actions"
+    bl_description = "Move items up and down, add and remove"
+    bl_options = {'REGISTER'}
+
+    action: bpy.props.EnumProperty(
+        items=(
+            ('REMOVE', "Remove", ""),
+            ('ADD', "Add", "")))
+
+    def invoke(self, context, event):
+        prefs = context.preferences.addons[__name__].preferences
+        idx = prefs.project_coll_idx
+        try:
+            item = prefs.project_directory_coll[idx]
+        except IndexError:
+            pass
+        else:
+            if self.action == 'REMOVE':
+                info = 'Item "%s" removed from list' % (prefs.project_directory_coll[idx].name)
+                prefs.project_coll_idx -= 1
+                prefs.project_directory_coll.remove(idx)
+                if prefs.project_coll_idx < 0: prefs.project_coll_idx = 0
+
+        if self.action == 'ADD':
+            item = prefs.project_directory_coll.add()
+            item.index = len(prefs.project_directory_coll)
+            prefs.project_coll_idx = len(prefs.project_directory_coll)-1
         return {"FINISHED"}
 
 
@@ -660,6 +751,11 @@ class LoomSettings(bpy.types.PropertyGroup):
         name = "Sync Compositor",
         description="Sync version string with File Output nodes",
         default = True)
+
+    project_directory: bpy.props.StringProperty(
+        name="Project Directory",
+        description="Stores the path to the Project Directory",
+        maxlen=1024)
 
 # -------------------------------------------------------------------
 #    UI Operators
@@ -3021,7 +3117,6 @@ class LOOM_OT_playblast(bpy.types.Operator):
 #    Utilities
 # -------------------------------------------------------------------
 
-
 class LOOM_OT_clear_dialog(bpy.types.Operator):
     """Clear Log Collection"""
     bl_idname = "loom.clear_log"
@@ -3405,6 +3500,33 @@ class LOOM_OT_delete_file(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+class LOOM_OT_utils_create_directory(bpy.types.Operator):
+    """Create a directory based on a given path"""
+    bl_idname = "loom.create_directory"
+    bl_label = "Create a given directory"
+    bl_options = {'INTERNAL'}
+    
+    directory: bpy.props.StringProperty(subtype='DIR_PATH')
+
+    def execute(self, context):
+        if not self.directory:
+            self.report({'WARNING'},"No directory specified")
+            return {'CANCELLED'}
+        
+        abs_path = bpy.path.abspath(self.directory).rstrip('/').rstrip('\\') # Dirty!
+        head, tail = os.path.split(abs_path)
+        if not os.path.isdir(head):
+            self.report({'WARNING'},"Access denied: '{}' does not exists".format(head))
+            return {'CANCELLED'}
+        else:
+            if not os.path.exists(abs_path):
+                os.mkdir(abs_path)
+                self.report({'INFO'},"'{}' created".format(abs_path))
+            else:
+                self.report({'INFO'},"'{}' already in place".format(abs_path))
+        return {'FINISHED'}
+
+
 class LOOM_OT_utils_marker_unbind(bpy.types.Operator):
     """Unbind Markers in Selection"""
     bl_idname = "loom.unbind_markers"
@@ -3529,7 +3651,6 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
         
         for cam in cam_candidates:
             if self.frame in marker_frames:
-                #print ("FOUNDDDDD", marker_frames)
                 m = [m for m in markers if m.frame==self.frame][0]
                 m.name = cam.name
             else:            
@@ -3561,6 +3682,112 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
         row.prop(self, "sort_reverse", icon='SORTALPHA')
         row = layout.row()
         row.prop(self, "offset")        
+        layout.separator()
+
+
+class LOOM_OT_select_project_directory(bpy.types.Operator, ExportHelper):
+    """Select Project Directory using the File Browser"""
+    bl_idname = "loom.select_project_directory"
+    bl_label = "Project Directory"
+    bl_description = "Select Project Directory using File Browser"
+
+    filename_ext = ""
+    use_filter_folder = True
+    cursor_pos = [0,0]
+    
+    def display_popup(self, context):
+        win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
+        win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # re-invoke the dialog
+        bpy.ops.loom.set_project_dialog('INVOKE_DEFAULT')
+        #bpy.context.window.screen = bpy.context.window.screen
+
+    def cancel(self, context):
+        self.display_popup(context)
+
+    def invoke(self, context, event):
+        self.cursor_pos = [event.mouse_x, event.mouse_y]
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+    
+    def execute(self, context):
+        scn = context.scene
+        lum = scn.loom
+        lum.project_directory = os.path.dirname(self.filepath)
+        self.display_popup(context)
+        return {'FINISHED'}
+
+
+class LOOM_OT_set_project(bpy.types.Operator):
+    """Loom — Set Project Dialog"""
+    bl_idname = "loom.set_project_dialog"
+    bl_label = "Set Project Directory"
+    bl_options = {'REGISTER'}
+
+    directory: bpy.props.StringProperty(name="Project Directory")
+    
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def execute(self, context):
+        scn = context.scene
+        lum = scn.loom
+        
+        if not self.directory or not os.path.isdir(self.directory):
+            self.report({'ERROR'}, "Please specify a valid Project Directory")
+            return {'CANCELLED'}
+
+        errors = []
+        prefs = context.preferences.addons[__name__].preferences
+        for i in prefs.project_directory_coll:
+            pdir = os.path.join(self.directory, i.name)
+            bpy.ops.loom.create_directory(directory=pdir)
+            if not os.path.isdir(bpy.path.abspath(pdir)):
+                errors.append(i.name)
+        
+        if not errors:
+            self.report({'INFO'}, "All directories successfully created")
+        else:
+            self.report({'WARNING'}, 
+                "Something went wrong while creating [{0}]".format(
+                    ', '.join(map(str, errors))))
+        
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        prefs = context.preferences.addons[__name__].preferences
+        lum = context.scene.loom
+        if not context.scene.loom.project_directory:
+            lum.project_directory = bpy.path.abspath('//')
+        self.directory = lum.project_directory
+        return context.window_manager.invoke_props_dialog(self, width=(600))
+
+    def check(self, context):
+        return True
+
+    def draw(self, context):
+        prefs = context.preferences.addons[__name__].preferences
+        scn = context.scene
+        lum = scn.loom
+        
+        layout = self.layout
+        row = layout.row()
+        row.template_list(
+            listtype_name = "LOOM_UL_directories", 
+            list_id = "", 
+            dataptr = prefs,
+            propname = "project_directory_coll", 
+            active_dataptr = prefs,
+            active_propname = "project_coll_idx", 
+            rows=6)
+        
+        col = row.column(align=True)
+        col.operator(LOOM_OT_actions_directories_ui.bl_idname, icon='ADD', text="").action = 'ADD'
+        col.operator(LOOM_OT_actions_directories_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+        layout.separator()
+        row = layout.row(align=True)
+        row.prop(self, "directory")
+        row.operator(LOOM_OT_select_project_directory.bl_idname, icon='FILE_FOLDER', text="")
         layout.separator()
 
 
@@ -3635,6 +3862,12 @@ def draw_loom_globals(self, context):
         #row.prop(context.scene.loom, "compiled_path", emboss=False, icon=custom_icon)
 
 
+def draw_loom_project(self, context):
+    layout = self.layout
+    layout.separator()
+    layout.operator(LOOM_OT_set_project.bl_idname, icon="OUTLINER") #PRESET
+
+
 # -------------------------------------------------------------------
 #    Registration & Shortcuts
 # -------------------------------------------------------------------
@@ -3653,15 +3886,26 @@ global_var_defaults = {
     "$SUM": 'str(sum([8, 16, 32]))'
 }
 
+project_directories = {
+    1: "assets",
+    2: "geometry",
+    3: "textures",
+    4: "render",
+    5: "comp"
+}
+
 classes = (
     LoomRenderCollection,
     LoomBatchRenderCollection,
     LoomGlobalsCollection,
     LOOM_UL_globals,
+    LoomProjectDirectoryCollection,
+    LOOM_UL_directories,
     LoomSettings,
     LoomPreferences,
     LOOM_OT_pref_reset,
     LOOM_OT_actions_global_ui,
+    LOOM_OT_actions_directories_ui,
     LOOM_OT_render_threads,
     LOOM_OT_render_full_scale,
     LOOM_OT_timeline_props,
@@ -3689,6 +3933,7 @@ classes = (
     LOOM_OT_encode_auto_paths,
     LOOM_OT_fill_sequence_gaps,
     LOOM_OT_open_folder,
+    LOOM_OT_utils_node_cleanup,
     LOOM_OT_help,
     LOOM_OT_render_terminal,
     LOOM_OT_render_image_sequence,
@@ -3699,12 +3944,14 @@ classes = (
     LOOM_OT_run_terminal,
     LOOM_OT_delete_bash_files,
     LOOM_OT_delete_file,
+    LOOM_OT_utils_create_directory,
     LOOM_MT_render_menu,
     LOOM_MT_marker_menu,
     LOOM_OT_utils_marker_generate,
     LOOM_OT_utils_marker_rename,
     LOOM_OT_utils_marker_unbind,
-    LOOM_OT_utils_node_cleanup
+    LOOM_OT_select_project_directory,
+    LOOM_OT_set_project
 )
 
 
@@ -3716,7 +3963,7 @@ def register():
 
     bpy.types.Scene.loom = bpy.props.PointerProperty(type=LoomSettings)
 
-    # Key registration
+    """ Hotkey registration """
     kc = bpy.context.window_manager.keyconfigs.addon
     if kc:
         km = kc.keymaps.new(name="Screen", space_type='EMPTY')
@@ -3736,22 +3983,32 @@ def register():
         kmi.active = True
         addon_keymaps.append((km, kmi))
 
-    # Globals
+    """ Globals """
     glob = bpy.context.preferences.addons[__name__].preferences.global_variable_coll
     if not glob:
         for key, value in global_var_defaults.items():
             gvi = glob.add()
             gvi.name = key
             gvi.prop = value
+    
+    """ Project Directories """
+    dirs = bpy.context.preferences.addons[__name__].preferences.project_directory_coll
+    if not dirs:
+        for key, value in project_directories.items():
+            di = dirs.add()
+            di.name = value
+            di.index = key
 
+    """ Menus """
     bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu) # TOPBAR_MT_editor_menus
     bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_globals)
-    
+    bpy.types.TOPBAR_MT_app.append(draw_loom_project) # TOPBAR_MT_edit
     
 
 def unregister():
+    bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
     bpy.types.RENDER_PT_output.remove(draw_loom_globals)
     bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
     bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
