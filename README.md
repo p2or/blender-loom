@@ -87,9 +87,10 @@ The available settings are slightly different per operating system. However, you
 
 ## Gotchas and Limitations
 
+ - Loom does not support direct encoding, make sure the *File Format* is set to *Image*
  - Activation of the *Playblast* hotkey requires restarting blender
  - In case encoding fails for some reason, make sure the path to ffmpeg binary is [absolute](https://en.wikipedia.org/wiki/Path_(computing))
-  - Renewal of hotkeys *once entirely removed*, requires resetting the *Addon-Preferences* and restarting blender 
+ - Renewal of hotkeys *once entirely removed*, requires resetting the *Addon-Preferences* and restarting blender 
  - Switching the terminal back from *Xterm* to the default system terminal requires resetting the *Addon-Preferences* in some cases
  
 ## Installation
