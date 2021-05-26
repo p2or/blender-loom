@@ -36,7 +36,7 @@ You can also render **every nth frame** of the scene by adding `x` followed by a
 
  - You can **verify the output** before rendering the animation by clicking the *Verify Output* operator ![I1](https://i.stack.imgur.com/JovW0.jpg), which reports all frames that are going to be rendered (in the *Info Area* as well as in the terminal)
  - You can enable *Filtering* ![I1](https://i.stack.imgur.com/lKqJq.jpg) to handle each number after the caret (`^`) separatly, this allows to **add single frames** or frame ranges **right after any excluded frame**, e.g. `1-10 23 ^3-7 4 6` renders `1, 2, 4, 6, 8, 9, 10, 23` instead of `1, 2, 8, 9, 10, 23` if the property is disabled
- - You can **render specific keyframes** by selecting the keys in the *Dope Sheet* or the *Graph Editor* and calling *Render Selected Keyframes* operator via <kbd>spacebar</kbd>, which automatically adds the frames to the render list:
+ - You can **render specific keyframes** by selecting the keys in the *Dope Sheet* or the *Graph Editor* and calling *Render Selected Keyframes* operator via <kbd>F3</kbd>, which automatically adds the frames to the render list:
  
    ![Render Selected Keyframes](https://i.stack.imgur.com/PUs71.jpg)
  
