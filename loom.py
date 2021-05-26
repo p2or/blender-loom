@@ -957,7 +957,12 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             bpy.ops.loom.verify_terminal()
         if not lum.is_property_set("threads") or not lum.threads:
             lum.threads = scn.render.threads  # *.5
-
+        
+        # Testing
+        '''
+        if context.area.type == 'DOPESHEET_EDITOR':
+            bpy.ops.loom.render_selected_keys()
+        '''
         return context.window_manager.invoke_props_dialog(self, 
             width=(prefs.render_dialog_width))
 
@@ -1086,9 +1091,13 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         editors = ('DOPESHEET_EDITOR', 'GRAPH_EDITOR', 'TIMELINE')
+        '''
+        areas = [a.type for a in context.screen.areas]
+        return any((True for x in areas if x in editors))
+        '''
         return context.space_data.type in editors and \
             not context.scene.render.is_movie_format
-
+        
     def execute(self, context):
         space = context.space_data #print (space.type)
 
@@ -3858,9 +3867,9 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         layout.operator(LOOM_OT_encode_dialog.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence") #FILE_MOVIE
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
-        layout.separator()
-        layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
-        layout.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Selected Markers")
+        #layout.separator()
+        #layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
+        #layout.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Selected Markers")
         layout.separator()
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
@@ -3923,6 +3932,27 @@ def draw_loom_project(self, context):
     layout.separator()
     layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
 
+
+class LOOM_PT_dopesheet(bpy.types.Panel):
+    """Dopesheet Render Options"""
+    bl_label = "Loom"
+    bl_space_type = 'DOPESHEET_EDITOR'
+    bl_region_type = 'HEADER'
+    bl_ui_units_x = 11
+
+    def draw(self, context):
+        col = self.layout.column()
+        col.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA')
+        col.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT')
+        col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #col.separator()
+
+def draw_loom_dopesheet(self, context):
+    row = self.layout.row(align=True)
+    row.separator()
+    row.popover(
+        panel="LOOM_PT_dopesheet",
+        text="",
+        icon='SEQUENCE')
 
 # -------------------------------------------------------------------
 #    Registration & Shortcuts
@@ -4009,7 +4039,8 @@ classes = (
     LOOM_OT_select_project_directory,
     LOOM_OT_project_dialog,
     LOOM_MT_render_menu,
-    LOOM_MT_marker_menu
+    LOOM_MT_marker_menu,
+    LOOM_PT_dopesheet
 )
 
 
@@ -4071,6 +4102,7 @@ def register():
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_globals)
     bpy.types.TOPBAR_MT_app.append(draw_loom_project)
+    bpy.types.DOPESHEET_HT_header.append(draw_loom_dopesheet)
     
 
 def unregister():
@@ -4079,6 +4111,7 @@ def unregister():
     bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
     bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TOPBAR_MT_render.remove(draw_loom_render_menu)
+    bpy.types.DOPESHEET_HT_header.remove(draw_loom_dopesheet)
     
     from bpy.utils import unregister_class
     for cls in reversed(classes):
