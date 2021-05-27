@@ -958,11 +958,6 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         if not lum.is_property_set("threads") or not lum.threads:
             lum.threads = scn.render.threads  # *.5
         
-        # Testing
-        '''
-        if context.area.type == 'DOPESHEET_EDITOR':
-            bpy.ops.loom.render_selected_keys()
-        '''
         return context.window_manager.invoke_props_dialog(self, 
             width=(prefs.render_dialog_width))
 
@@ -1502,7 +1497,6 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
         win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # re-invoke the dialog
         bpy.ops.loom.batch_render_dialog('INVOKE_DEFAULT')
-        #bpy.context.window.screen = bpy.context.window.screen
 
     def cancel(self, context):
         self.display_popup(context)
