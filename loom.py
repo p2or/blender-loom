@@ -3880,7 +3880,10 @@ class LOOM_MT_marker_menu(bpy.types.Menu):
 def draw_loom_marker_menu(self, context):
     layout = self.layout
     layout.separator()
-    layout.menu(LOOM_MT_marker_menu.bl_idname)
+    #layout.menu(LOOM_MT_marker_menu.bl_idname)
+    layout.operator(LOOM_OT_utils_marker_generate.bl_idname, icon='CON_CAMERASOLVER', text="Markers from Cameras")
+    layout.operator(LOOM_OT_utils_marker_unbind.bl_idname, icon='UNLINKED', text="Unbind Selected Markers")
+    layout.operator(LOOM_OT_utils_marker_rename.bl_idname, icon='FONT_DATA', text="Batch Rename Markers")
 
 
 def draw_loom_version_number(self, context):
@@ -3927,18 +3930,20 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
     bl_ui_units_x = 11
 
     def draw(self, context):
-        col = self.layout.column()
+        layout = self.layout
+        col = layout.column()
+        col.label(text="Loom", icon='RENDER_STILL')
+        col = layout.column()
         col.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA')
         col.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT')
+        col.separator()
         col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
+        col = layout.column()
 
 def draw_loom_dopesheet(self, context):
     row = self.layout.row(align=True)
     row.separator()
-    row.popover(
-        panel="LOOM_PT_dopesheet",
-        text="",
-        icon='SEQUENCE')
+    row.popover(panel="LOOM_PT_dopesheet", text="", icon='SEQUENCE')
 
 # -------------------------------------------------------------------
 #    Registration & Shortcuts
