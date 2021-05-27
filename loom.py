@@ -3636,11 +3636,7 @@ class LOOM_OT_utils_marker_rename(bpy.types.Operator):
         return {'FINISHED'}
         
     def invoke(self, context, event):
-        wm = context.window_manager
-        dpi = context.preferences.system.pixel_size
-        ui_size = context.preferences.system.ui_scale
-        dialog_size = 450 * dpi * ui_size
-        return wm.invoke_props_dialog(self, width=int(dialog_size))
+        return context.window_manager.invoke_props_dialog(self, width=500)
 
     def draw(self, context):
         layout = self.layout
@@ -3750,7 +3746,6 @@ class LOOM_OT_select_project_directory(bpy.types.Operator, ExportHelper):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
         win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # re-invoke the dialog
         bpy.ops.loom.set_project_dialog('INVOKE_DEFAULT')
-        #bpy.context.window.screen = bpy.context.window.screen
 
     def cancel(self, context):
         self.display_popup(context)
@@ -3867,9 +3862,6 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         layout.operator(LOOM_OT_encode_dialog.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence") #FILE_MOVIE
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
-        #layout.separator()
-        #layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
-        #layout.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Selected Markers")
         layout.separator()
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
@@ -3930,7 +3922,7 @@ def draw_loom_project(self, context):
     """Append project dialog to app settings"""
     layout = self.layout
     layout.separator()
-    layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
+    layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER")
 
 
 class LOOM_PT_dopesheet(bpy.types.Panel):
@@ -3944,7 +3936,7 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         col = self.layout.column()
         col.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA')
         col.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT')
-        col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #col.separator()
+        col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
 
 def draw_loom_dopesheet(self, context):
     row = self.layout.row(align=True)
@@ -4097,8 +4089,10 @@ def register():
             di.creation_flag = True
 
     """ Menus """
-    bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu) # TOPBAR_MT_editor_menus
+    bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu)
     bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
+    bpy.types.DOPESHEET_MT_marker.append(draw_loom_marker_menu)
+    bpy.types.NLA_MT_marker.append(draw_loom_marker_menu)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_globals)
     bpy.types.TOPBAR_MT_app.append(draw_loom_project)
@@ -4109,6 +4103,8 @@ def unregister():
     bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
     bpy.types.RENDER_PT_output.remove(draw_loom_globals)
     bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
+    bpy.types.NLA_MT_marker.remove(draw_loom_marker_menu)
+    bpy.types.DOPESHEET_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TOPBAR_MT_render.remove(draw_loom_render_menu)
     bpy.types.DOPESHEET_HT_header.remove(draw_loom_dopesheet)
