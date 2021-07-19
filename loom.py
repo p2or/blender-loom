@@ -957,7 +957,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             bpy.ops.loom.verify_terminal()
         if not lum.is_property_set("threads") or not lum.threads:
             lum.threads = scn.render.threads  # *.5
-
+        
         return context.window_manager.invoke_props_dialog(self, 
             width=(prefs.render_dialog_width))
 
@@ -1086,9 +1086,13 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         editors = ('DOPESHEET_EDITOR', 'GRAPH_EDITOR', 'TIMELINE')
+        '''
+        areas = [a.type for a in context.screen.areas]
+        return any((True for x in areas if x in editors))
+        '''
         return context.space_data.type in editors and \
             not context.scene.render.is_movie_format
-
+        
     def execute(self, context):
         space = context.space_data #print (space.type)
 
@@ -1493,7 +1497,6 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
         win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # re-invoke the dialog
         bpy.ops.loom.batch_render_dialog('INVOKE_DEFAULT')
-        #bpy.context.window.screen = bpy.context.window.screen
 
     def cancel(self, context):
         self.display_popup(context)
@@ -3627,11 +3630,7 @@ class LOOM_OT_utils_marker_rename(bpy.types.Operator):
         return {'FINISHED'}
         
     def invoke(self, context, event):
-        wm = context.window_manager
-        dpi = context.preferences.system.pixel_size
-        ui_size = context.preferences.system.ui_scale
-        dialog_size = 450 * dpi * ui_size
-        return wm.invoke_props_dialog(self, width=int(dialog_size))
+        return context.window_manager.invoke_props_dialog(self, width=500)
 
     def draw(self, context):
         layout = self.layout
@@ -3741,7 +3740,6 @@ class LOOM_OT_select_project_directory(bpy.types.Operator, ExportHelper):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
         win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # re-invoke the dialog
         bpy.ops.loom.set_project_dialog('INVOKE_DEFAULT')
-        #bpy.context.window.screen = bpy.context.window.screen
 
     def cancel(self, context):
         self.display_popup(context)
@@ -3859,9 +3857,6 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
         layout.separator()
-        layout.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Selected Keyframes")
-        layout.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Selected Markers")
-        layout.separator()
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
         layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
@@ -3885,7 +3880,10 @@ class LOOM_MT_marker_menu(bpy.types.Menu):
 def draw_loom_marker_menu(self, context):
     layout = self.layout
     layout.separator()
-    layout.menu(LOOM_MT_marker_menu.bl_idname)
+    #layout.menu(LOOM_MT_marker_menu.bl_idname)
+    layout.operator(LOOM_OT_utils_marker_generate.bl_idname, icon='CON_CAMERASOLVER', text="Markers from Cameras")
+    layout.operator(LOOM_OT_utils_marker_unbind.bl_idname, icon='UNLINKED', text="Unbind Selected Markers")
+    layout.operator(LOOM_OT_utils_marker_rename.bl_idname, icon='FONT_DATA', text="Batch Rename Markers")
 
 
 def draw_loom_version_number(self, context):
@@ -3921,8 +3919,31 @@ def draw_loom_project(self, context):
     """Append project dialog to app settings"""
     layout = self.layout
     layout.separator()
-    layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
+    layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER")
 
+
+class LOOM_PT_dopesheet(bpy.types.Panel):
+    """Dopesheet Render Options"""
+    bl_label = "Loom"
+    bl_space_type = 'DOPESHEET_EDITOR'
+    bl_region_type = 'HEADER'
+    bl_ui_units_x = 11
+
+    def draw(self, context):
+        layout = self.layout
+        col = layout.column()
+        col.label(text="Loom", icon='RENDER_STILL')
+        col = layout.column()
+        col.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA')
+        col.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT')
+        col.separator()
+        col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
+        col = layout.column()
+
+def draw_loom_dopesheet(self, context):
+    row = self.layout.row(align=True)
+    row.separator()
+    row.popover(panel="LOOM_PT_dopesheet", text="", icon='SEQUENCE')
 
 # -------------------------------------------------------------------
 #    Registration & Shortcuts
@@ -4009,7 +4030,8 @@ classes = (
     LOOM_OT_select_project_directory,
     LOOM_OT_project_dialog,
     LOOM_MT_render_menu,
-    LOOM_MT_marker_menu
+    LOOM_MT_marker_menu,
+    LOOM_PT_dopesheet
 )
 
 
@@ -4066,19 +4088,25 @@ def register():
             di.creation_flag = True
 
     """ Menus """
-    bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu) # TOPBAR_MT_editor_menus
+    bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu)
     bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
+    bpy.types.DOPESHEET_MT_marker.append(draw_loom_marker_menu)
+    bpy.types.NLA_MT_marker.append(draw_loom_marker_menu)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_globals)
     bpy.types.TOPBAR_MT_app.append(draw_loom_project)
+    bpy.types.DOPESHEET_HT_header.append(draw_loom_dopesheet)
     
 
 def unregister():
     bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
     bpy.types.RENDER_PT_output.remove(draw_loom_globals)
     bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
+    bpy.types.NLA_MT_marker.remove(draw_loom_marker_menu)
+    bpy.types.DOPESHEET_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TOPBAR_MT_render.remove(draw_loom_render_menu)
+    bpy.types.DOPESHEET_HT_header.remove(draw_loom_dopesheet)
     
     from bpy.utils import unregister_class
     for cls in reversed(classes):
