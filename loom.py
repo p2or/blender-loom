@@ -925,10 +925,12 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             user_error = True
         
         out_folder, out_filename = os.path.split(bpy.path.abspath(scn.render.filepath))
-        if not self.write_permission(os.path.realpath(out_folder)):
-            self.report({'ERROR'}, "Specified output folder does not exist (permission denied)")
-            user_error = True
 
+        if not self.write_permission(os.path.realpath(out_folder)):
+            if not any(ext in out_folder for ext in prefs.global_variable_coll.keys()):
+                self.report({'ERROR'}, "Specified output folder does not exist (permission denied)")
+                user_error = True
+        
         if user_error: #bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
@@ -2911,10 +2913,18 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         """ Main output path """        
         self._output_path = scn.render.filepath
         output_folder, self._filename = os.path.split(bpy.path.abspath(self._output_path))
-        self._folder = os.path.realpath(output_folder)
+        self._folder = os.path.realpath(output_folder)        
         self._extension = self.file_extension(scn.render.image_settings.file_format)
         self._filename = self.safe_filename(self._filename)
         #self._output_path = os.path.join(self._folder, self._filename)
+
+        # Replace globals in main output path
+        if any(ext in self._folder for ext in glob_vars.keys()):
+            self._folder = replace_globals(self._folder)
+            bpy.ops.loom.create_directory(directory=self._folder)
+            if not os.path.isdir(self._folder):
+                self.report({'INFO'}, "Specified folder can not be created")
+                return {"CANCELLED"}
 
         """ Output node paths """
         for out_node in self.out_nodes(scn):
@@ -3560,17 +3570,20 @@ class LOOM_OT_utils_create_directory(bpy.types.Operator):
             self.report({'WARNING'},"No directory specified")
             return {'CANCELLED'}
         
-        abs_path = bpy.path.abspath(self.directory).rstrip('/').rstrip('\\')
+        abs_path = bpy.path.abspath(self.directory)
+        '''
         head, tail = os.path.split(abs_path)
         if not os.path.isdir(head):
             self.report({'WARNING'},"Access denied: '{}' does not exists".format(head))
             return {'CANCELLED'}
         else:
-            if not os.path.exists(abs_path):
-                os.mkdir(abs_path)
-                self.report({'INFO'},"'{}' created".format(abs_path))
-            else:
-                self.report({'INFO'},"'{}' already in place".format(abs_path))
+        '''
+        if not os.path.exists(abs_path):
+            os.makedirs(abs_path)
+            self.report({'INFO'},"'{}' created".format(abs_path))
+        else:
+            self.report({'INFO'},"'{}' already in place".format(abs_path))
+            
         return {'FINISHED'}
 
 
@@ -3889,25 +3902,55 @@ def draw_loom_marker_menu(self, context):
 def draw_loom_version_number(self, context):
     """Append Version Number Slider to the Output Area"""
     if re.search("v\d+", context.scene.render.filepath) is not None:
+        
+        glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
+        output_folder, file_name = os.path.split(bpy.path.abspath(context.scene.render.filepath))
+        if any(ext in output_folder for ext in glob_vars.keys()):
+            output_folder = replace_globals(output_folder)
+        else:
+            output_folder = os.path.dirname(context.scene.render.frame_path())
+
         layout = self.layout
         row = layout.row(align=True)
         row.prop(context.scene.loom, "output_render_version") #NODE_COMPOSITING
-        row.prop(context.scene.loom, "output_sync_comp", text="", toggle=True, icon="IMAGE_RGB_ALPHA") 
+        row.prop(context.scene.loom, "output_sync_comp", text="", toggle=True, icon="IMAGE_RGB_ALPHA")
+        
         row.operator(LOOM_OT_open_folder.bl_idname, 
-                icon="DISK_DRIVE", text="").folder_path = os.path.dirname(context.scene.render.frame_path())
+                icon="DISK_DRIVE", text="").folder_path = output_folder
         #layout.separator()
 
 
 def draw_loom_globals(self, context):
     """Append compiled file path using globals to the Output Area"""
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
-    output_folder, file_name = os.path.split(bpy.path.abspath(context.scene.render.filepath))
+    fp = bpy.path.abspath(context.scene.render.filepath)
+    output_folder, file_name = os.path.split(fp)
+    user_globals = False
 
+    '''
     if any(ext in file_name for ext in glob_vars.keys()): # For now, file name only 
         layout = self.layout
         file_name = replace_globals(file_name)
         file_path = os.path.join(output_folder, file_name)
         custom_icon = "ERROR" if any(ext in file_path for ext in glob_vars.keys()) else "DISK_DRIVE"
+        layout.separator()
+        row = layout.row()
+        row.operator(LOOM_OT_open_folder.bl_idname, 
+                icon=custom_icon, text="", emboss=False).folder_path = os.path.dirname(file_path)
+        row.label(text="{}".format(file_path))
+    '''
+
+    if any(ext in file_name for ext in glob_vars.keys()):
+        file_name = replace_globals(file_name)
+        user_globals = True
+    if any(ext in output_folder for ext in glob_vars.keys()):
+        output_folder = replace_globals(output_folder)
+        user_globals = True
+
+    if user_globals:
+        layout = self.layout
+        file_path = os.path.join(output_folder, file_name)
+        custom_icon = "ERROR" if not os.path.isdir(output_folder) else "DISK_DRIVE"
         layout.separator()
         row = layout.row()
         row.operator(LOOM_OT_open_folder.bl_idname, 
