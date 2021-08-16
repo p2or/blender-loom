@@ -923,14 +923,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         if not user_input and not any(char.isdigit() for char in user_input):
             self.report({'ERROR'}, "No frames to render.")
             user_error = True
-        
-        out_folder, out_filename = os.path.split(bpy.path.abspath(scn.render.filepath))
 
-        if not self.write_permission(os.path.realpath(out_folder)):
-            if not any(ext in out_folder for ext in prefs.global_variable_coll.keys()):
-                self.report({'ERROR'}, "Specified output folder does not exist (permission denied)")
-                user_error = True
-        
         if user_error: #bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
@@ -3583,8 +3576,10 @@ class LOOM_OT_utils_create_directory(bpy.types.Operator):
             self.report({'INFO'},"'{}' created".format(abs_path))
         else:
             self.report({'INFO'},"'{}' already in place".format(abs_path))
-            
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
 
 
 class LOOM_OT_utils_marker_unbind(bpy.types.Operator):
@@ -3915,30 +3910,19 @@ def draw_loom_version_number(self, context):
         row.prop(context.scene.loom, "output_render_version") #NODE_COMPOSITING
         row.prop(context.scene.loom, "output_sync_comp", text="", toggle=True, icon="IMAGE_RGB_ALPHA")
         
+        row = row.row(align=True)
+        row.enabled = os.path.isdir(output_folder)
         row.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="").folder_path = output_folder
         #layout.separator()
 
 
-def draw_loom_globals(self, context):
+def draw_loom_outputpath(self, context):
     """Append compiled file path using globals to the Output Area"""
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
     fp = bpy.path.abspath(context.scene.render.filepath)
     output_folder, file_name = os.path.split(fp)
     user_globals = False
-
-    '''
-    if any(ext in file_name for ext in glob_vars.keys()): # For now, file name only 
-        layout = self.layout
-        file_name = replace_globals(file_name)
-        file_path = os.path.join(output_folder, file_name)
-        custom_icon = "ERROR" if any(ext in file_path for ext in glob_vars.keys()) else "DISK_DRIVE"
-        layout.separator()
-        row = layout.row()
-        row.operator(LOOM_OT_open_folder.bl_idname, 
-                icon=custom_icon, text="", emboss=False).folder_path = os.path.dirname(file_path)
-        row.label(text="{}".format(file_path))
-    '''
 
     if any(ext in file_name for ext in glob_vars.keys()):
         file_name = replace_globals(file_name)
@@ -3946,15 +3930,19 @@ def draw_loom_globals(self, context):
     if any(ext in output_folder for ext in glob_vars.keys()):
         output_folder = replace_globals(output_folder)
         user_globals = True
-
-    if user_globals:
-        layout = self.layout
+    
+    if user_globals or not os.path.isdir(output_folder):
         file_path = os.path.join(output_folder, file_name)
-        custom_icon = "ERROR" if not os.path.isdir(output_folder) else "DISK_DRIVE"
+        layout = self.layout
         layout.separator()
+        
         row = layout.row()
-        row.operator(LOOM_OT_open_folder.bl_idname, 
-                icon=custom_icon, text="", emboss=False).folder_path = os.path.dirname(file_path)
+        if not os.path.isdir(output_folder):
+            row.operator(LOOM_OT_utils_create_directory.bl_idname, 
+                icon="ERROR", text="", emboss=False).directory = os.path.dirname(file_path)
+        else:
+            row.operator(LOOM_OT_open_folder.bl_idname, 
+                icon="DISK_DRIVE", text="", emboss=False).folder_path = os.path.dirname(file_path)
         row.label(text="{}".format(file_path))
 
 
@@ -4136,14 +4124,14 @@ def register():
     bpy.types.DOPESHEET_MT_marker.append(draw_loom_marker_menu)
     bpy.types.NLA_MT_marker.append(draw_loom_marker_menu)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
-    bpy.types.RENDER_PT_output.append(draw_loom_globals)
+    bpy.types.RENDER_PT_output.append(draw_loom_outputpath)
     bpy.types.TOPBAR_MT_app.append(draw_loom_project)
     bpy.types.DOPESHEET_HT_header.append(draw_loom_dopesheet)
     
 
 def unregister():
     bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
-    bpy.types.RENDER_PT_output.remove(draw_loom_globals)
+    bpy.types.RENDER_PT_output.remove(draw_loom_outputpath)
     bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
     bpy.types.NLA_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.DOPESHEET_MT_marker.remove(draw_loom_marker_menu)
