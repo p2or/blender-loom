@@ -33,7 +33,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 7, 5),
+    "version": (0, 7, 8),
     "blender": (2, 82, 0),
     "location": "Render Menu",
     "warning": "",
@@ -3800,8 +3800,11 @@ class LOOM_OT_project_dialog(bpy.types.Operator):
                 if not os.path.isdir(bpy.path.abspath(pdir)):
                     errors.append(d.name)
                 if any(x in d.name.lower() for x in ["rndr", "render"]):
-                    if os.path.isdir(bpy.path.abspath(pdir)):
+                    if os.path.isdir(bpy.path.abspath(pdir)) and \
+                        scn.render.filepath.startswith(("/tmp", "/temp")) or \
+                        scn.render.filepath == "//":
                         scn.render.filepath = bpy.path.relpath(pdir) + "/"
+
         if not errors:
             self.report({'INFO'}, "All directories successfully created")
         else:
