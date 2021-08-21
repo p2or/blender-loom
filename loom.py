@@ -774,17 +774,22 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         name="Batch Render Collection",
         type=LOOM_PG_batch_render)
 
-    output_render_version : bpy.props.IntProperty(
+    output_render_version: bpy.props.IntProperty(
         name = "Render Version",
         description="Render Version",
         default = 1, 
         min = 1,
         update = render_version)
 
-    output_sync_comp : bpy.props.BoolProperty(
+    output_sync_comp: bpy.props.BoolProperty(
         name = "Sync Compositor",
         description="Sync version string with File Output nodes",
         default = True)
+
+    comp_image_settings: bpy.props.BoolProperty(
+        name = "Dislay Image Settings",
+        description="Dislay Image Settings of each File Output Node",
+        default = False)
 
     project_directory: bpy.props.StringProperty(
         name="Project Directory",
@@ -3553,7 +3558,7 @@ class LOOM_OT_delete_file(bpy.types.Operator):
 class LOOM_OT_utils_create_directory(bpy.types.Operator):
     """Create a directory based on a given path"""
     bl_idname = "loom.create_directory"
-    bl_label = "Create a given directory"
+    bl_label = "Create given directory"
     bl_options = {'INTERNAL'}
     
     directory: bpy.props.StringProperty(subtype='DIR_PATH')
@@ -3937,9 +3942,10 @@ def draw_loom_outputpath(self, context):
     if user_globals or not os.path.isdir(output_folder):
         file_path = os.path.join(output_folder, file_name)
         layout = self.layout
-        layout.separator()
+        box = layout.box()
+        #layout.separator()
         
-        row = layout.row()
+        row = box.row()
         if not os.path.isdir(output_folder):
             row.operator(LOOM_OT_utils_create_directory.bl_idname, 
                 icon="ERROR", text="", emboss=False).directory = os.path.dirname(file_path)
@@ -3947,6 +3953,33 @@ def draw_loom_outputpath(self, context):
             row.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="", emboss=False).folder_path = os.path.dirname(file_path)
         row.label(text="{}".format(file_path))
+        layout.row()
+
+
+def draw_loom_compositor_paths(self, context):
+    """Display File Output paths to the Output Area"""
+    scene = context.scene
+    output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
+    if scene.use_nodes and output_nodes:
+        lum = scene.loom
+        layout = self.layout
+        layout.separator()
+        box = layout.box()
+        row = box.row()
+        row.label(text="Compositor Output Nodes")
+        icon = 'COLLAPSEMENU' if lum.comp_image_settings else 'MODIFIER'
+        row.prop(lum, "comp_image_settings", icon=icon, text="")
+                
+        for o in output_nodes:
+            row = box.row()
+            i = "IMAGE_PLANE" if o.format.file_format == 'OPEN_EXR_MULTILAYER' else "RENDERLAYERS"
+            row.prop(o, "base_path", text="{}".format(o.name), icon=i)
+            if lum.comp_image_settings:
+                col = box.column()
+                col.template_image_settings(o.format, color_management=False)
+                col.separator()
+        
+        layout.row()
 
 
 def draw_loom_project(self, context):
@@ -3978,6 +4011,7 @@ def draw_loom_dopesheet(self, context):
     row = self.layout.row(align=True)
     row.separator()
     row.popover(panel="LOOM_PT_dopesheet", text="", icon='SEQUENCE')
+
 
 # -------------------------------------------------------------------
 #    Registration & Shortcuts
@@ -4126,21 +4160,24 @@ def register():
     bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
     bpy.types.DOPESHEET_MT_marker.append(draw_loom_marker_menu)
     bpy.types.NLA_MT_marker.append(draw_loom_marker_menu)
+    bpy.types.RENDER_PT_output.prepend(draw_loom_outputpath)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
-    bpy.types.RENDER_PT_output.append(draw_loom_outputpath)
+    bpy.types.RENDER_PT_output.append(draw_loom_compositor_paths)
     bpy.types.TOPBAR_MT_app.append(draw_loom_project)
     bpy.types.DOPESHEET_HT_header.append(draw_loom_dopesheet)
     
 
 def unregister():
+    bpy.types.DOPESHEET_HT_header.remove(draw_loom_dopesheet)
     bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
+    bpy.types.RENDER_PT_output.remove(draw_loom_compositor_paths)
     bpy.types.RENDER_PT_output.remove(draw_loom_outputpath)
     bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
     bpy.types.NLA_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.DOPESHEET_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TOPBAR_MT_render.remove(draw_loom_render_menu)
-    bpy.types.DOPESHEET_HT_header.remove(draw_loom_dopesheet)
+    
     
     from bpy.utils import unregister_class
     for cls in reversed(classes):
