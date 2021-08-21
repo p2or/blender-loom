@@ -3966,7 +3966,7 @@ def draw_loom_compositor_paths(self, context):
         layout.separator()
         box = layout.box()
         row = box.row()
-        row.label(text="Compositor Output Nodes")
+        row.label(text="Compositor Output Nodes", icon='NODETREE')
         icon = 'COLLAPSEMENU' if lum.comp_image_settings else 'MODIFIER'
         row.prop(lum, "comp_image_settings", icon=icon, text="")
                 
