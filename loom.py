@@ -3959,27 +3959,28 @@ def draw_loom_outputpath(self, context):
 def draw_loom_compositor_paths(self, context):
     """Display File Output paths to the Output Area"""
     scene = context.scene
-    output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
-    if scene.use_nodes and output_nodes:
-        lum = scene.loom
-        layout = self.layout
-        layout.separator()
-        box = layout.box()
-        row = box.row()
-        row.label(text="Compositor Output Nodes", icon='NODETREE')
-        icon = 'COLLAPSEMENU' if lum.comp_image_settings else 'MODIFIER'
-        row.prop(lum, "comp_image_settings", icon=icon, text="")
-                
-        for o in output_nodes:
+    if hasattr(scene.node_tree, "nodes"):
+        output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
+        if len(output_nodes) > 0:
+            lum = scene.loom
+            layout = self.layout
+            layout.separator()
+            box = layout.box()
             row = box.row()
-            i = "IMAGE_PLANE" if o.format.file_format == 'OPEN_EXR_MULTILAYER' else "RENDERLAYERS"
-            row.prop(o, "base_path", text="{}".format(o.name), icon=i)
-            if lum.comp_image_settings:
-                col = box.column()
-                col.template_image_settings(o.format, color_management=False)
-                col.separator()
-        
-        layout.row()
+            row.label(text="Compositor Output Nodes", icon='NODETREE')
+            icon = 'COLLAPSEMENU' if lum.comp_image_settings else 'MODIFIER'
+            row.prop(lum, "comp_image_settings", icon=icon, text="")
+                    
+            for o in output_nodes:
+                row = box.row()
+                i = "IMAGE_PLANE" if o.format.file_format == 'OPEN_EXR_MULTILAYER' else "RENDERLAYERS"
+                row.prop(o, "base_path", text="{}".format(o.name), icon=i)
+                if lum.comp_image_settings:
+                    col = box.column()
+                    col.template_image_settings(o.format, color_management=False)
+                    col.separator()
+            
+            layout.row()
 
 
 def draw_loom_project(self, context):
