@@ -22,20 +22,22 @@ import os
 import errno
 import subprocess
 import blend_render_info
-from sys import platform
+import rna_keymap_ui
+import webbrowser
+
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 from numpy import arange, around, isclose
 from itertools import count, groupby
-import rna_keymap_ui
-import webbrowser
+from time import strftime
+from sys import platform
+
 
 bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 7, 8),
+    "version": (0, 8, 0),
     "blender": (2, 82, 0),
-    "location": "Render Menu",
     "warning": "",
     "wiki_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
@@ -242,14 +244,38 @@ def replace_globals(s, debug=False):
             print (key, val, val.expr)
     return s
 
+def user_globals(context):
+    """Determine whether globals used in the scene"""
+    scn = context.scene
+    vars = context.preferences.addons[__name__].preferences.global_variable_coll
+    if any(ext in scn.render.filepath for ext in vars.keys()):
+        return True
+    if scn.use_nodes and len(scn.node_tree.nodes) > 0:
+        tree = scn.node_tree
+        nodes = (n for n in tree.nodes if n.type=='OUTPUT_FILE')
+        for node in nodes:
+            if any(ext in node.base_path for ext in vars.keys()):
+                return True
+            if "LAYER" in node.format.file_format:
+                for slot in node.layer_slots:
+                    if any(ext in slot.name for ext in vars.keys()):
+                        return True
+            else:
+                for slot in node.file_slots:
+                     if any(ext in slot.path for ext in vars.keys()):
+                         return True   
+    return False
+
 
 def verify_app(cmd):
+    """Verify whether an external app is callable"""
     try:
         subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as e:
         if e.errno == errno.ENOENT:
             return False
     return True
+
 
 # -------------------------------------------------------------------
 #    Preferences & Scene Properties
@@ -319,8 +345,8 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         default=450, min=400)
 
     encode_dialog_width: bpy.props.IntProperty(
-        name="Encoding Dialog Width",
-        description = "Width of Encoding Dialog",
+        name="Encoding/Rename Dialog Width",
+        description = "Width of Encoding and Rename Dialog",
         subtype='PIXEL',
         default=650, min=400)
 
@@ -354,6 +380,13 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         description="Path to ffmpeg",
         maxlen=1024,
         subtype='FILE_PATH')
+    
+    snapshot_directory: bpy.props.StringProperty(
+        name="Snapshot Directory",
+        description="Path of the Snapshot directory",
+        maxlen=1024,
+        default="//temp",
+        subtype='DIR_PATH')
 
     default_codec: bpy.props.StringProperty(
         name="User Codec",
@@ -363,13 +396,13 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         name="Batch Dialog Width",
         description="Width of Batch Render Dialog",
         subtype='PIXEL',
-        default=650, min=600, max=1800)
+        default=750, min=600, max=1800)
 
     batch_dialog_rows: bpy.props.IntProperty(
         name="Number of Rows",
         description="Number of Rows",
         min=7, max=40,
-        default=12)
+        default=9)
     
     batch_paths_flag: bpy.props.BoolProperty(
         name="Display File Paths",
@@ -479,6 +512,10 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             col.operator(LOOM_OT_globals_ui.bl_idname, icon='ADD', text="").action = 'ADD'
             col.operator(LOOM_OT_globals_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
             col.separator()
+            col.operator("wm.save_userpref", text="", icon="CHECKMARK")
+            #row = box_globals.row()
+            #row.operator("wm.save_userpref", text="Save Globals", icon="CHECKMARK")
+            col.separator()
             exp_box = box_globals.box()
             row = exp_box.row()
             row.label(text='Expression Tester')
@@ -495,6 +532,7 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             split.label(text="Result:", icon='FILE_VOLUME')
             split.label(text="{}".format(eval_info))
             box_globals.row()
+            
 
         """ Project Directories """
         box_dirs = layout.box()
@@ -530,7 +568,9 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         if self.display_advanced:
             row = box_advanced.row()
             row.prop(self, "ffmpeg_path")
-
+            row = box_advanced.row()
+            row.prop(self, "snapshot_directory")
+            row = box_advanced.row()
             split = box_advanced.split(factor=split_width)
             lft = split.column(align=True) # Left
             fsh = lft.column(align=True)
@@ -627,7 +667,6 @@ class LOOM_OT_globals_ui(bpy.types.Operator):
     """Move global variables up and down, add and remove"""
     bl_idname = "loom.globals_action"
     bl_label = "Global Actions"
-    bl_description = "Move items up and down, add and remove"
     bl_options = {'REGISTER'}
 
     action: bpy.props.EnumProperty(
@@ -660,10 +699,9 @@ class LOOM_OT_globals_ui(bpy.types.Operator):
 
 
 class LOOM_OT_directories_ui(bpy.types.Operator):
-    """Move global variables up and down, add and remove"""
+    """Move items up and down, add and remove"""
     bl_idname = "loom.directory_action"
     bl_label = "Directory Actions"
-    bl_description = "Move items up and down, add and remove"
     bl_options = {'REGISTER'}
 
     action: bpy.props.EnumProperty(
@@ -715,6 +753,19 @@ class LOOM_PG_batch_render(bpy.types.PropertyGroup):
     input_filter: bpy.props.BoolProperty(default=False)
 
 
+class LOOM_PG_slots(bpy.types.PropertyGroup):
+    # name: bpy.props.StringPropery()
+    orig: bpy.props.StringProperty()
+    repl: bpy.props.StringProperty()
+
+class LOOM_PG_paths(bpy.types.PropertyGroup):
+    # name: bpy.props.StringPropery()
+    id: bpy.props.IntProperty()
+    orig: bpy.props.StringProperty()
+    repl: bpy.props.StringProperty()
+    slts: bpy.props.CollectionProperty(name="Slot Collection", type=LOOM_PG_slots)
+
+
 class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
 
     frame_input: bpy.props.StringProperty(
@@ -739,7 +790,7 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
     threads: bpy.props.IntProperty(
         name="CPU Threads",
         description="Number of CPU threads to use simultaneously while rendering",
-        min = 1)
+        min=1)
     
     sequence_encode: bpy.props.StringProperty(
         name="Image Sequence",
@@ -749,6 +800,11 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
     movie_path: bpy.props.StringProperty(
         name="Movie",
         description="Movie File output path",
+        maxlen=1024)
+
+    sequence_rename: bpy.props.StringProperty(
+        name="New Sequence Name",
+        description="New Sequence Name",
         maxlen=1024)
 
     lost_frames: bpy.props.StringProperty(
@@ -777,24 +833,29 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
     output_render_version: bpy.props.IntProperty(
         name = "Render Version",
         description="Render Version",
-        default = 1, 
-        min = 1,
-        update = render_version)
+        default=1, 
+        min=1,
+        update=render_version)
 
     output_sync_comp: bpy.props.BoolProperty(
-        name = "Sync Compositor",
+        name="Sync Compositor",
         description="Sync version string with File Output nodes",
-        default = True)
+        default=True)
 
     comp_image_settings: bpy.props.BoolProperty(
-        name = "Dislay Image Settings",
+        name="Dislay Image Settings",
         description="Dislay Image Settings of each File Output Node",
-        default = False)
+        default=False)
 
     project_directory: bpy.props.StringProperty(
         name="Project Directory",
         description="Stores the path to the Project Directory",
         maxlen=1024)
+
+    path_collection: bpy.props.CollectionProperty(
+        name="Globals Path Collection",
+        type=LOOM_PG_paths)
+
 
 # -------------------------------------------------------------------
 #    UI Operators
@@ -804,7 +865,6 @@ class LOOM_OT_render_threads(bpy.types.Operator):
     """Set all available threads"""
     bl_idname = "loom.available_threads"
     bl_label = "Reset Threads"
-    bl_description = "Set to all available threads"
     bl_options = {'INTERNAL'}
 
     def execute(self, context):
@@ -818,11 +878,9 @@ class LOOM_OT_render_full_scale(bpy.types.Operator):
     """Set Resolution Percentage Scale to 100%"""
     bl_idname = "loom.full_scale"
     bl_label = "Full Scale"
-    bl_description = "Set Resolution Percentage Scale to 100%"
     bl_options = {'INTERNAL'}
 
-    def execute(self, context): 
-        #context.area.tag_redraw()
+    def execute(self, context): #context.area.tag_redraw()
         context.scene.render.resolution_percentage = 100
         return {'FINISHED'}
 
@@ -831,7 +889,6 @@ class LOOM_OT_timeline_props(bpy.types.Operator):
     """Set timeline range, steps & threads from UI"""
     bl_idname = "loom.timeline_properties"
     bl_label = "Timeline UI Properties"
-    bl_description = "Set range based on Timeline"
     bl_options = {'INTERNAL'}
 
     def execute(self, context):
@@ -844,10 +901,9 @@ class LOOM_OT_timeline_props(bpy.types.Operator):
 
 
 class LOOM_OT_verify_frames(bpy.types.Operator):
-    """Display all frames & the current render location"""
+    """Report all Frames to render & the current Render Location"""
     bl_idname = "loom.verify_frames"
     bl_label = "Verify Input Frames"
-    bl_description = "Report all Frames that are going to be rendered"
     bl_options = {'INTERNAL'}
 
     frame_input = None
@@ -873,10 +929,9 @@ class LOOM_OT_verify_frames(bpy.types.Operator):
 
 
 class LOOM_OT_render_dialog(bpy.types.Operator):
-    """Render Image Sequence UI"""
+    """Render Image Sequence Dialog"""
     bl_idname = "loom.render_dialog"
     bl_label = "Render Image Sequence"
-    bl_description = "Render Image Sequence"
     bl_options = {'REGISTER'}
 
     show_errors: bpy.props.BoolProperty(
@@ -921,9 +976,11 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             bpy.ops.wm.save_as_mainfile('INVOKE_DEFAULT')
             user_error = True
         
-        if not context.scene.camera:
-            self.report({'ERROR'}, "No camera in scene.")
+        if not scn.camera:
+            self.report({'WARNING'}, "No camera in scene.")
             user_error = True
+            if scn.use_nodes:
+                user_error = False
 
         if not user_input and not any(char.isdigit() for char in user_input):
             self.report({'ERROR'}, "No frames to render.")
@@ -977,7 +1034,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         sub.prop(lum, "frame_input", text="")
         sub.prop(lum, "filter_input", icon='FILTER', icon_only=True)
         #sub.prop(lum, "filter_keyframes", icon='SPACE2', icon_only=True)
-        sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="") #SEQ_LUMA_WAVEFORM
+        sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="")
 
         split = layout.split(factor=.17)
         col = split.column(align=True)
@@ -1014,10 +1071,9 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
 
 
 class LOOM_OT_render_input_dialog(bpy.types.Operator):
-    """Allows to pass custom numbers and ranges to the render dialog"""
+    """Pass custom Frame Numbers and Ranges to the Render Dialog"""
     bl_idname = "loom.render_input_dialog"
     bl_label = "Render Frames"
-    bl_description = "Open up Render Image Sequence dialog"
     bl_options = {'INTERNAL'}
 
     frame_input: bpy.props.StringProperty()
@@ -1032,10 +1088,9 @@ class LOOM_OT_render_input_dialog(bpy.types.Operator):
         
 
 class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
-    """Render selected keys of the dopesheet or graph editor"""
+    """Render selected Keyframes in the Timeline, Graph Editor or Dopesheet"""
     bl_idname = "loom.render_selected_keys"
     bl_label = "Render Selected Keyframes"
-    bl_description = "Render selected Keyframes in the Timeline, Graph Editor or Dopesheet"
     bl_options = {'REGISTER'}
 
     def int_filter(self, flt):
@@ -1131,10 +1186,9 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
 
 
 class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
-    """Render selected markers of the dopesheet or timeline"""
+    """Render selected Markers in the Timeline or Dopesheet"""
     bl_idname = "loom.render_selected_markers"
     bl_label = "Render Selected Markers"
-    bl_description = "Render selected Markers in the Timeline or Dopesheet"
     bl_options = {'REGISTER'}
 
     def rangify_frames(self, frames):
@@ -1228,8 +1282,12 @@ class LOOM_UL_batch_list(bpy.types.UIList):
         row.prop(item, "frames", text="") #, icon='IMAGEFILE'
         #row = split_right.row(align=True) #row.prop(item, "input_filter", text="", icon='FILTER')
         row.prop(item, "input_filter", text="", icon='FILTER')
-        row.operator("loom.batch_verify_input", text="", icon='GHOST_ENABLED').item_id = index
+
         row.prop(item, "encode_flag", text="", icon='FILE_MOVIE')
+        row.operator("loom.batch_verify_input", text="", icon='GHOST_ENABLED').item_id = index
+        row.separator()
+        row.operator(LOOM_OT_open_folder.bl_idname, 
+                icon="DISK_DRIVE", text="").folder_path = os.path.dirname(item.path)
 
     def invoke(self, context, event):
         pass   
@@ -1435,24 +1493,34 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             propname = "batch_render_coll", 
             active_dataptr = lum, 
             active_propname = "batch_render_idx", 
-            rows=prefs.batch_dialog_rows
-        )
+            rows=prefs.batch_dialog_rows)
         
         col = row.column(align=True)
-        col.operator("loom.batch_select_blends", icon='ADD', text="")
-        col.operator("loom.batch_dialog_action", icon='REMOVE', text="").action = 'REMOVE'
-        col.menu("LOOM_MT_display_settings", icon='DOWNARROW_HLT', text="")
+        #col.operator(LOOM_OT_batch_snapshot.bl_idname, icon="WORKSPACE", text="")
+        #col.separator()
+        col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon='ADD', text="")
+        col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+        col.menu(LOOM_MT_display_settings.bl_idname, icon='DOWNARROW_HLT', text="")
         col.separator()
         col.separator()
-        col.operator("loom.batch_dialog_action", icon='TRIA_UP', text="").action = 'UP'
-        col.operator("loom.batch_dialog_action", icon='TRIA_DOWN', text="").action = 'DOWN'
-        
+        col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='TRIA_UP', text="").action = 'UP'
+        col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='TRIA_DOWN', text="").action = 'DOWN'
+
+        layout.row() # Seperator
         row = layout.row(align=True)
-        row = row.column(align=True)
-        row.operator("loom.batch_scandir_blends", icon='ZOOM_SELECTED') #VIEWZOOM
-        col = row.row(align=True)
-        col.operator("loom.batch_remove_doubles", text="Remove Duplicates", icon="SEQ_SPLITVIEW")
-        col.operator("loom.batch_clear_list", text="Clear List", icon="PANEL_CLOSE")
+        col = row.column(align=True)
+        col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon="DOCUMENTS")
+        row = col.row(align=True)
+        row.operator(LOOM_OT_batch_snapshot.bl_idname, icon="IMAGE_BACKGROUND", text="Add Snapshot")
+        row.operator(LOOM_OT_scan_blends.bl_idname, icon='ZOOM_SELECTED') #VIEWZOOM
+
+        layout.row() # Seperator
+        row = layout.row(align=True)
+        #row = row.column(align=True)
+        #row.operator(LOOM_OT_scan_blends.bl_idname, icon='ZOOM_SELECTED') #VIEWZOOM
+        sub_row = row.row(align=True)
+        sub_row.operator(LOOM_OT_batch_remove_doubles.bl_idname, text="Remove Duplicates", icon="SEQ_SPLITVIEW")
+        sub_row.operator(LOOM_OT_batch_clear_list.bl_idname, text="Clear List", icon="PANEL_CLOSE")
         
         if any(i.encode_flag for i in lum.batch_render_coll):
             row = layout.row()
@@ -1473,16 +1541,183 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             row = layout.row()
             row.separator()
 
+        layout.row() # Seperator
         row = layout.row() #if platform.startswith('win32'):
         row.prop(self, "shutdown", text="Shutdown when done")
         row = layout.row()
+
+
+class LOOM_OT_batch_snapshot(bpy.types.Operator):
+    """Create a Snapshot from the current Blend File"""
+    bl_idname = "loom.batch_snapshot"
+    bl_label = "Snapshot"
+    bl_options = {'INTERNAL'}
+    bl_property = "file_name"
+    
+    snapshot_folder: bpy.props.StringProperty(
+        name="Snapshot Folder",
+        description="Folder to copy the snapshot to",
+        default="//tmp",
+        subtype='DIR_PATH')
+        
+    file_name: bpy.props.StringProperty(
+        name="Filename",
+        description="The filename used for the copy",
+        default="",
+        options={'SKIP_SAVE'})
+    
+    suffix: bpy.props.EnumProperty(
+        name="Filename",
+        description="Apply or Restore Paths",
+        default = 'DATE',
+        items=(
+            ('DATE', "Date (no Suffix)", ""),
+            ('NUMBSUFF', "Number Suffix", ""),
+            ('DATESUFF', "Date Suffix", "")))
+
+    overwrite: bpy.props.BoolProperty(
+        name="Overwrite File",
+        description="Overwrite existing files",
+        default=False)
+    
+    apply_globals: bpy.props.BoolProperty(
+        name="Apply Globals",
+        default=False)
+
+    globals_flag: bpy.props.BoolProperty(
+        name="Globals Flag",
+        options={'HIDDEN'},
+        default=False)
+
+    def number_suffix(self, filename_no_extension):
+        regex = re.compile(r'\d+\b')
+        digits = ([x for x in regex.findall(filename_no_extension)])
+        return next(reversed(digits), None)
+
+    def file_sequence(self, filepath, digits=None, extension=None):
+        file_sequence = {}
+        basedir, filename = os.path.split(filepath)
+        basedir = os.path.realpath(bpy.path.abspath(basedir))
+        filename_noext, ext = os.path.splitext(filename)
+        num_suffix = self.number_suffix(filename_noext)
+        filename = filename_noext.replace(num_suffix,'') if num_suffix else filename_noext
+        if extension: ext = extension
+        if digits:
+            file_pattern = r"{fn}(\d{{{ds}}})\.?{ex}$".format(fn=filename, ds=digits, ex=ext)
+        else:
+            file_pattern = r"{fn}(\d+)\.?{ex}".format(fn=filename, ex=ext)
+        
+        for f in os.scandir(basedir):
+            if f.name.endswith(ext) and f.is_file():
+                match = re.match(file_pattern, f.name, re.IGNORECASE)
+                if match: file_sequence[int(match.group(1))] = os.path.join(basedir, f.name)
+        return file_sequence
+
+    def execute(self, context):
+        snap_dir = self.snapshot_folder
+        if not self.properties.is_property_set("snapshot_folder"):
+            snap_dir = context.preferences.addons[__name__].preferences.snapshot_directory
+        
+        basedir = os.path.realpath(bpy.path.abspath(snap_dir))
+        fn_noext, ext = os.path.splitext(self.file_name)
+        fn_noext = fn_noext if self.file_name else "00"
+        ext = ext if ext else ".blend"
+        
+        ''' Create the folder if not present '''
+        if not os.path.exists(basedir):
+            bpy.ops.loom.create_directory(directory=basedir)
+        
+        ''' Format the filename '''
+        fcopy = None
+        if self.suffix == 'NUMBSUFF':
+            leading_zeros = 2 # Expose?
+            suff = "{:0{}d}".format(1, leading_zeros)
+            bound_filename = suff if not self.file_name else "{}_{}".format(fn_noext, suff)
+            fcopy = os.path.join(basedir, "{}{}".format(bound_filename, ext))
+
+            if os.path.isfile(fcopy) and not self.overwrite:
+                fs = self.file_sequence(fcopy, digits=leading_zeros)
+                if fs:
+                    suff = "{:0{}d}".format(max(fs.keys())+1, leading_zeros)
+                    nextf = suff if not self.file_name else "{}_{}".format(fn_noext, suff)
+                    #last_number, last_path = list(fs.items())[-1] # Python 3.8+
+                    fcopy = os.path.join(basedir, "{}{}".format(nextf, ext))
+        else:
+            ft = strftime('%Y-%m-%d-%H-%M-%S')
+            if self.suffix == 'DATE' and self.options.is_invoke:
+                fcopy = os.path.join(basedir, "{}{}".format(ft, ext))
+            else:
+                date_fn = ft if not self.file_name else "{}_{}".format(fn_noext, ft)       
+                fcopy = os.path.join(basedir, "{}{}".format(date_fn, ext))
+        
+        ''' Save a copy and add it to Loom Batch '''
+        if os.path.exists(basedir) and fcopy is not None:
+            
+            if self.apply_globals: bpy.ops.loom.globals_bake(action='APPLY')
+            bpy.ops.wm.save_as_mainfile(filepath=fcopy, copy=True)
+            if self.apply_globals: bpy.ops.loom.globals_bake(action='RESET')
+            self.report({'INFO'},"Snapshot created: {}".format(fcopy))
+
+            ''' Add the snapshot to the list '''
+            if self.options.is_invoke:
+                fd, fn = os.path.split(fcopy)
+                scn = context.scene
+                lum = scn.loom
+                try: # https://blender.stackexchange.com/a/55503/3710
+                    data = blend_render_info.read_blend_rend_chunk(fcopy)
+                    start, end, sc = data[0]
+                    item = lum.batch_render_coll.add()
+                    item.rid = len(lum.batch_render_coll)
+                    item.name = fn
+                    item.path = fcopy
+                    item.frame_start = start
+                    item.frame_end = end
+                    item.scene = sc
+                    item.frames = "{}-{}".format(item.frame_start, item.frame_end)
+                    lum.batch_render_idx = len(lum.batch_render_coll)-1
+                except:
+                    self.report({'WARNING'},"Unable adding the file to the list")
+
+        if not os.path.isfile(fcopy):
+            self.report({'WARNING'},"Can not save a copy of the current file")
+            return {"CANCELLED"}
+        else:
+            return {'FINISHED'}
+
+    def invoke(self, context, event):
+        if user_globals(context):
+            self.globals_flag = True
+        if bpy.data.filepath:
+            self.file_name = bpy.path.basename(bpy.data.filepath)[:-6]
+        return context.window_manager.invoke_props_dialog(self, width=450)
+        #else:
+            #return self.execute(context)
+
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        row = row.prop(self, "suffix", expand=True)
+        if self.suffix != 'DATE':
+            row = layout.row(align=True)
+            row.prop(self, "file_name")
+        if self.globals_flag:
+            row = layout.row(align=True)
+            row.prop(self, "apply_globals")
+        '''
+        col = layout.column(align=True)
+        row = col.row(align=True)
+        row.prop(self, "suffix", expand=True)
+        if self.globals_flag:
+            row = col.row(align=True)
+            row.prop(self, "apply_globals", toggle=True)
+        '''
+        layout.row()
 
 
 class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
     """Select Blend Files via File Browser"""
     bl_idname = "loom.batch_select_blends"
     bl_label = "Select Blend Files"
-    bl_description = "Select Blend Files in File Browser"
 
     filename_ext = ".blend"
     filter_glob: bpy.props.StringProperty(
@@ -1510,7 +1745,7 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         scn = context.scene
         lum = scn.loom
-        folder = (os.path.dirname(self.filepath))
+        folder = os.path.dirname(self.filepath)
         
         added = []
         for i in self.files:
@@ -1628,10 +1863,9 @@ class LOOM_OT_scan_blends(bpy.types.Operator, ImportHelper):
 
 
 class LOOM_OT_batch_list_actions(bpy.types.Operator):
-    """Loom Batch Dialog Action"""
+    """Loom Batch Dialog Actions"""
     bl_idname = "loom.batch_dialog_action"
     bl_label = "Loom Batch Dialog Action"
-    bl_description = "Loom Batch Dialog Action"
     bl_options = {'INTERNAL'}
     
     action: bpy.props.EnumProperty(
@@ -1675,14 +1909,14 @@ class LOOM_OT_batch_list_actions(bpy.types.Operator):
 
 
 class LOOM_OT_batch_clear_list(bpy.types.Operator):
+    """Clear all items of the Render Collection"""
     bl_idname = "loom.batch_clear_list"
     bl_label = "Delete all items of the list?"
-    bl_description = "Clear all items"
     bl_options = {'INTERNAL'}
     
     @classmethod
     def poll(cls, context):
-        return bool(bpy.context.scene.loom.batch_render_coll)
+        return bool(context.scene.loom.batch_render_coll)
     
     def execute(self, context):
         context.scene.loom.batch_render_coll.clear()
@@ -1694,9 +1928,9 @@ class LOOM_OT_batch_clear_list(bpy.types.Operator):
     
 
 class LOOM_OT_batch_dialog_reset(bpy.types.Operator):
+    """Reset Batch Dialog Display Settings"""
     bl_idname = "loom.batch_dialog_reset_display"
     bl_label = "Reset Display Settings"
-    bl_description = "Reset Batch Dialog Display Settings"
     bl_options = {'INTERNAL'}
     
     def execute(self, context):
@@ -1709,9 +1943,9 @@ class LOOM_OT_batch_dialog_reset(bpy.types.Operator):
 
 
 class LOOM_OT_batch_remove_doubles(bpy.types.Operator):
+    """Remove Duplicates in List based on the filename"""
     bl_idname = "loom.batch_remove_doubles"
     bl_label = "Remove All Duplicates?"
-    bl_description = "Remove Duplicates in List based on the filename"
     bl_options = {'INTERNAL'}
     
     doubles = []
@@ -1755,9 +1989,9 @@ class LOOM_OT_batch_remove_doubles(bpy.types.Operator):
 
 
 class LOOM_OT_batch_active_item(bpy.types.Operator):
+    """Print active Item"""
     bl_idname = "loom.batch_active_item"
     bl_label = "Print Active Item to Console"
-    bl_description = "Print active Item"
     bl_options = {'INTERNAL'}
 
     def execute(self, context):
@@ -1770,9 +2004,9 @@ class LOOM_OT_batch_active_item(bpy.types.Operator):
     
 
 class LOOM_OT_batch_default_range(bpy.types.Operator):
+    """Revert to default frame range"""
     bl_idname = "loom.batch_default_frames"
     bl_label = "Revert to default frame range"
-    bl_description = "Revert to default frame range"
     bl_options = {'INTERNAL'}
     
     item_id: bpy.props.IntProperty()
@@ -1788,9 +2022,9 @@ class LOOM_OT_batch_default_range(bpy.types.Operator):
 
 
 class LOOM_OT_batch_verify_input(bpy.types.Operator):
+    """Verify Input Frame Range"""
     bl_idname = "loom.batch_verify_input"
     bl_label = "Verify Input Frame Range"
-    bl_description = "Verify Input Frame Range"
     bl_options = {'INTERNAL'}
     
     item_id: bpy.props.IntProperty()
@@ -1822,7 +2056,6 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
     """Encode Image Sequence to ProRes or DNxHD"""
     bl_idname = "loom.encode_dialog"
     bl_label = "Encode Image Sequence"
-    bl_description = "Encode Image Sequence"
     bl_options = {'REGISTER'}
 
     sequence: bpy.props.StringProperty(
@@ -2017,7 +2250,6 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
 
         mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
         if os.path.isfile(mov_path):
-            from time import strftime
             time_stamp = strftime("_%Y%m%d-%H%M%S")
             mov_filename_noext = "{}{}".format(mov_filename_noext, time_stamp)
         
@@ -2144,6 +2376,210 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         row = layout.row()
 
 
+class LOOM_OT_rename_dialog(bpy.types.Operator):
+    """Rename Image or File Sequence"""
+    bl_idname = "loom.rename_file_sequence"
+    bl_label = "Rename File Sequence"
+    bl_description = "Rename File or Image Sequence"
+    bl_options = {'REGISTER'}
+    bl_property = "new_name"
+
+    sequence: bpy.props.StringProperty(
+        name="Path to sequence",
+        description="Path to sequence",
+        maxlen=1024,
+        subtype='FILE_PATH')
+    
+    new_name: bpy.props.StringProperty(
+        name="Path to sequence",
+        description="Path to sequence",
+        maxlen=1024)
+    
+    keep_original_numbers: bpy.props.BoolProperty(
+        name="Keep Original Numbers",
+        description="Keep the Numbers of the Original File Sequence",
+        default=False)
+
+    start: bpy.props.IntProperty(
+        name="Start at",
+        description="Start at",
+        default=1,
+        min=0)
+        
+    open_file_browser: bpy.props.BoolProperty(
+        name="Open File Browser",
+        description="Open File Browser",
+        default=True)
+    
+    def missing_frames(self, frames):
+        return sorted(set(range(frames[0], frames[-1] + 1)).difference(frames))
+
+    def rangify_frames(self, frames):
+        """ Convert list of integers to Range string [1,2,3] -> '1-3' """
+        G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
+        return ",".join("-".join(map(str,(g[0],g[-1])[:len(g)])) for g in G)
+
+    def determine_type(self, val): 
+        #val = ast.literal_eval(s)
+        if (isinstance(val, int)):
+            return ("chi")
+        elif (isinstance(val, float)):
+            return ("chf")
+        if val in ["true", "false"]:
+            return ("chb")
+        else:
+            return ("chs")
+
+    def number_suffix(self, filename):
+        regex = re.compile(r'\d+\b')
+        digits = ([x for x in regex.findall(filename)])
+        return next(reversed(digits), None)
+
+    def pack_arguments(self, lst):
+        return [{"idc": 0, "name": self.determine_type(i), "value": str(i)} for i in lst]
+
+    def check(self, context):
+        return True        
+
+    def execute(self, context):
+        lum = context.scene.loom
+        image_sequence = {}
+        seq_path = lum.sequence_encode if not self.sequence else self.sequence
+        
+        path_error = False
+        if not seq_path:
+            self.report({'ERROR'}, "No image sequence specified")
+            path_error = True
+
+        if path_error:
+            bpy.ops.loom.rename_file_sequence('INVOKE_DEFAULT')
+            return {"CANCELLED"}
+
+        """ Verify image sequence """
+        basedir, filename = os.path.split(seq_path)
+        basedir = os.path.realpath(bpy.path.abspath(basedir))
+        filename_noext, extension = os.path.splitext(filename)
+
+        seq_error = False
+        if '#' not in filename_noext:
+            num_suff = self.number_suffix(filename_noext)
+            if not num_suff:
+                self.report({'ERROR'}, "No valid image sequence")
+                seq_error = True
+            else:
+                filename_noext = filename_noext.replace(num_suff, "#"*len(num_suff))
+        
+        if not extension: # Sequence file format
+            self.report({'ERROR'}, "File format not set (missing extension)")
+            seq_error = True
+
+        if seq_error:
+            bpy.ops.loom.rename_file_sequence('INVOKE_DEFAULT')
+            return {"CANCELLED"}
+
+        hashes = filename_noext.count('#')
+        name_real = filename_noext.replace("#", "")
+        file_pattern = r"{fn}(\d{{{ds}}})\.?{ex}$".format(fn=name_real, ds=hashes, ex=extension)
+
+        for f in os.scandir(basedir):
+            if f.name.endswith(extension) and f.is_file():
+                match = re.match(file_pattern, f.name, re.IGNORECASE)
+                if match: image_sequence[int(match.group(1))] = os.path.join(basedir, f.name)
+
+        if not len(image_sequence) > 1:
+            self.report({'WARNING'},"No valid image sequence")
+            bpy.ops.loom.rename_file_sequence('INVOKE_DEFAULT')
+            return {"CANCELLED"}
+
+        """ Rename File Sequence """
+        new_name = self.new_name
+        if new_name.endswith(tuple(bpy.path.extensions_image)):
+            new_name, file_extension = os.path.splitext(new_name)
+        user_name = new_name.replace("#", "")
+        user_hashes = new_name.count('#')
+        if not user_hashes: user_hashes = hashes
+        renamed = []
+
+        # Rename the sequence temporary if already in place (windows issue)
+        # -> os.rename fails in case the upcomming file has the same name
+        if user_name == name_real and user_hashes == hashes:
+            image_sequence_tmp = {}
+            for c, (k, v) in enumerate(image_sequence.items(), start=1):
+                num = "{n:0{dig}d}".format(n=c, dig=user_hashes)
+                if self.keep_original_numbers:
+                    d_tmp, fn_tmp = os.path.split(v)
+                    num = "{n:0{dig}d}".format(n=int(self.number_suffix(fn_tmp)), dig=user_hashes)
+                fp = os.path.join(basedir, "loom__tmp__{}{}".format(num, extension))
+                os.rename(v, fp)
+                image_sequence_tmp[int(num)] = fp
+            image_sequence = image_sequence_tmp
+        # -------------------------------------------------------------- */
+
+        for c, (k, v) in enumerate(image_sequence.items(), start=self.start):
+            num = "{n:0{dig}d}".format(n=c, dig=user_hashes)
+            if self.keep_original_numbers:
+                d_tmp, fn_tmp = os.path.split(v)
+                num = "{n:0{dig}d}".format(n=int(self.number_suffix(fn_tmp)), dig=user_hashes)
+            fp = os.path.join(basedir, "{}{}{}".format(user_name, num, extension))
+            os.rename(v, fp)
+            renamed.append(fp)
+        
+        if len(renamed) > 0:
+            sn = "{}{}".format(user_name, '#'*user_hashes)
+            lum.sequence_rename = "{}".format(sn)
+            lum.sequence_encode = os.path.join(basedir, "{}{}".format(sn, extension))
+            self.report({'INFO'}, "{} files renamed to {}".format(len(renamed), sn+extension))
+            if self.open_file_browser:
+                bpy.ops.loom.open_folder(folder_path=basedir)
+        else:
+            self.report({'ERROR'}, "Can not rename files")
+
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        prefs = context.preferences.addons[__name__].preferences
+        self.new_name = context.scene.loom.sequence_rename
+        return context.window_manager.invoke_props_dialog(self, 
+            width=(prefs.encode_dialog_width))
+
+    def draw(self, context):
+        lum = context.scene.loom
+        prefs = context.preferences.addons[__name__].preferences
+        layout = self.layout
+
+        split_width = .2
+        split = layout.split(factor=split_width)
+        col = split.column(align=True)
+        col.label(text="Sequence:")
+        col = split.column(align=True)
+        sub = col.row(align=True)          
+        sub.prop(lum, "sequence_encode", text="")
+        if lum.sequence_encode:
+            sub.operator(LOOM_OT_encode_verify_image_sequence.bl_idname, icon='GHOST_ENABLED', text="")
+            sub.operator(LOOM_OT_open_folder.bl_idname, 
+                icon="DISK_DRIVE", text="").folder_path = os.path.dirname(lum.sequence_encode)
+        else:
+            sub.operator(LOOM_OT_encode_auto_paths.bl_idname, text="", icon='AUTO') #GHOST_ENABLED, SEQUENCE
+        sel_sequence = sub.operator(LOOM_OT_load_image_sequence.bl_idname, text="", icon='FILE_TICK')
+        sel_sequence.dialog = 'rename'
+        sel_sequence.verify_sequence = False
+
+        split = layout.split(factor=split_width)
+        col = split.column(align=True)
+        col.label(text="New Sequence Name:")
+        col = split.column(align=True)
+        split = col.split(factor=0.85)
+        split.prop(self, "new_name", text="")
+        row = split.row(align=True)
+        row.prop(self, "keep_original_numbers", text="", icon='TEMP')
+        col = row.column(align=True)
+        col.enabled = not self.keep_original_numbers
+        col.prop(self, "start", text="")
+        layout.row()
+        layout.row().prop(self, "open_file_browser")
+        layout.separator()
+
+
 class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
     """Select File of Image Sequence"""
     bl_idname = "loom.load_sequence"
@@ -2152,7 +2588,13 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
     
     cursor_pos = [0,0]
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
-    
+    dialog: bpy.props.EnumProperty(
+        name="Dialog",
+        options={'HIDDEN'},
+        items=(
+            ("encode", "Encode Dialog", "", 1),
+            ("rename", "Rename Dialog", "", 2)))
+
     filter_glob: bpy.props.StringProperty(
         default="*.png;*.jpg;*.jpeg;*.jpg;*.exr;*dpx;*tga;*tif;*tiff;",
         #default="*" + ";*".join(bpy.path.extensions_image),
@@ -2194,8 +2636,11 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
     def display_popup(self, context):
         win = context.window #win.cursor_warp((win.width*.5)-100, (win.height*.5)+100)
         win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # x-100 y-+70
-        bpy.ops.loom.encode_dialog('INVOKE_DEFAULT') # re-invoke the dialog
-        
+        if self.dialog == 'encode':
+            bpy.ops.loom.encode_dialog('INVOKE_DEFAULT') # re-invoke the dialog
+        if self.dialog == 'rename':
+            bpy.ops.loom.rename_file_sequence('INVOKE_DEFAULT') # re-invoke the dialog
+
     @classmethod
     def poll(cls, context):
         return True #context.object is not None
@@ -2254,9 +2699,12 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
             else:
                 lum.lost_frames = ""
 
-        if not name_real: name_real = "untitled"
-        name_real = name_real[:-1] if name_real.endswith(("-", "_")) else name_real
-        lum.movie_path = os.path.join(basedir, name_real + ".mov")
+        if self.dialog == 'encode':
+            if not name_real: name_real = "untitled"
+            name_real = name_real[:-1] if name_real.endswith(("-", "_")) else name_real
+            lum.movie_path = os.path.join(basedir, name_real + ".mov")
+        if self.dialog == 'rename':
+            lum.sequence_rename = name_real
         lum.sequence_encode = sequence_path
 
         self.display_popup(context)
@@ -2266,6 +2714,8 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
         self.display_popup(context)
 
     def invoke(self, context, event):
+        s = context.scene.loom.sequence_encode
+        self.filepath = os.path.dirname(s) + "/" if s else bpy.path.abspath("//")
         self.cursor_pos = [event.mouse_x, event.mouse_y]
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -2442,10 +2892,9 @@ class LOOM_OT_encode_auto_paths(bpy.types.Operator):
 
 
 class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
-    """Fill gaps in sequence with copies"""
+    """Fill gaps in image sequence with copies of existing frames"""
     bl_idname = "loom.fill_image_sequence"
     bl_label = "Fill gaps in image sequence with copies of previous frames?"
-    bl_description = "Fill gaps in image sequence with copies of existing frames"
     bl_options = {'INTERNAL'}
     
     sequence_path: bpy.props.StringProperty()
@@ -2517,38 +2966,44 @@ class LOOM_OT_open_folder(bpy.types.Operator):
     """Opens a certain Folder in the File Browser"""
     bl_idname = "loom.open_folder"
     bl_label = "Open Folder"
-    bl_description = "Open folder in file browser"
     bl_options = {'INTERNAL'}
     
     folder_path: bpy.props.StringProperty()
     
     def execute(self, context):
+        fp = os.path.realpath(bpy.path.abspath(self.folder_path))
+        if not os.path.isdir(fp):
+            self.report({'INFO'}, "'{}' does not exist".format(fp))
+            return {"CANCELLED"}
         try:
             if platform.startswith('darwin'):
-                webbrowser.open("file://{}".format(self.folder_path))
+                webbrowser.open("file://{}".format(fp))
             elif platform.startswith('linux'):
                 try:
-                    #os.system('xdg-open "{}"'.format(self.folder_path))
-                    subprocess.call(["xdg-open", self.folder_path])
+                    #os.system('xdg-open "{}"'.format(fp))
+                    subprocess.call(["xdg-open", fp])
                 except:
-                    webbrowser.open(self.folder_path)
+                    webbrowser.open(fp)
             else:
-                webbrowser.open(self.folder_path)
+                webbrowser.open(fp)
         except OSError:
-            self.report({'INFO'}, "No Folder")
+            self.report({'INFO'}, "'{}' does not exist".format(fp))
         return {'FINISHED'}
 
 
 class LOOM_OT_open_output_folder(bpy.types.Operator):
-    """Opens up the output folder in the File Browser"""
+    """Open up the Output Directory in the File Browser"""
     bl_idname = "loom.open_ouput_dir"
     bl_label = "Open Output Directory"
-    bl_description = "Open up the Output Directory in the File Browser"
     bl_options = {'REGISTER'}
     
     def execute(self, context):
-        p = os.path.dirname(bpy.path.abspath(bpy.context.scene.render.filepath))
-        bpy.ops.loom.open_folder(folder_path=p)
+        fp = os.path.dirname(context.scene.render.filepath)
+        if not os.path.isdir(fp):
+            self.report({'INFO'}, "Folder does not exist")
+            return {"CANCELLED"}
+
+        bpy.ops.loom.open_folder(folder_path=fp)
         return {'FINISHED'}
 
 
@@ -2610,10 +3065,9 @@ class LOOM_OT_open_preferences(bpy.types.Operator):
         
         
 class LOOM_OT_help(bpy.types.Operator):
-    """Open up readme.md on github"""
+    """Open up Loom Documentation on github"""
     bl_idname = "loom.open_docs"
     bl_label = "Documentation"
-    bl_description= "Loom Documentation"
     bl_options = {'INTERNAL'}
     
     def execute(self, context): #self.report({'INFO'}, "")
@@ -2801,10 +3255,8 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             return blend_name + "_"
 
     def out_nodes(self, scene):
-        if scene.node_tree:
-            return [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
-        else:
-            return []
+        tree = scene.node_tree
+        return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
 
     def reset_output_paths(self, scene):
         scene.render.filepath = self._output_path
@@ -3007,7 +3459,6 @@ class LOOM_OT_playblast(bpy.types.Operator):
     """Playback rendered image sequence using the default or blender player"""
     bl_idname = "loom.playblast"
     bl_label = "Playblast Sequence"
-    bl_description = "Playback rendered image sequence"
     bl_options = {'REGISTER'}
     
     # Todo! Just a temporary solution.
@@ -3064,19 +3515,26 @@ class LOOM_OT_playblast(bpy.types.Operator):
         scn = context.scene
         lum = context.scene.loom
         prefs = context.preferences.addons[__name__].preferences #prefs.user_player = True
+        glob_vars = prefs.global_variable_coll
         preview_filetype = "jpg" if scn.render.image_settings.use_preview else None
         default_flag = False
         sequence_name = None
 
         if len(lum.render_collection) > 0 and prefs.log_render:
-
             seq = lum.render_collection[len(lum.render_collection)-1]
-            seq_dir = os.path.realpath(bpy.path.abspath(os.path.split(seq.file_path)[0]))
+            file_path = seq.file_path
+            seq_name = seq.name
+            if any(ext in file_path for ext in glob_vars.keys()):
+                file_path = replace_globals(file_path)
+            if any(ext in seq_name for ext in glob_vars.keys()):
+                seq_name = replace_globals(seq_name)
+
+            seq_dir = os.path.realpath(bpy.path.abspath(os.path.split(file_path)[0]))
             seq_ext = seq.image_format if not preview_filetype else preview_filetype
-            sequence_name = "{}.{}".format(seq.file_path, seq_ext)
+            sequence_name = "{}.{}".format(file_path, seq_ext)
 
             self.file_sequence(
-                filepath = os.path.join(seq_dir,"{}.{}".format(seq.name, seq.image_format)), 
+                filepath = os.path.join(seq_dir,"{}.{}".format(seq_name, seq.image_format)), 
                 digits = seq.padded_zeros, 
                 extension = preview_filetype)
             
@@ -3176,7 +3634,6 @@ class LOOM_OT_clear_dialog(bpy.types.Operator):
     """Clear Log Collection"""
     bl_idname = "loom.clear_log"
     bl_label = "Clear Log"
-    bl_description = "Clear logging properties"
     bl_options = {'INTERNAL'}
 
     def execute(self, context):
@@ -3185,10 +3642,9 @@ class LOOM_OT_clear_dialog(bpy.types.Operator):
 
 
 class LOOM_OT_verify_terminal(bpy.types.Operator):
-    """Search for system terminal"""
+    """Search and verify system terminal"""
     bl_idname = "loom.verify_terminal"
     bl_label = "Verify Terminal"
-    bl_description = "Verifies the terminal installed on the system"
     bl_options = {'INTERNAL'}
 
     def verify_app(self, cmd):
@@ -3241,10 +3697,9 @@ class LOOM_PG_generic_arguments(bpy.types.PropertyGroup):
     idc: bpy.props.IntProperty()
 
 class LOOM_OT_run_terminal(bpy.types.Operator):
-    """Run an instance of an application in a new terminal"""
+    """Run instance of an application in a new terminal"""
     bl_idname = "loom.run_terminal"
     bl_label = "Run Application in Terminal"
-    bl_description = "Run Application in a new Terminal"
     bl_options = {'INTERNAL'}
 
     binary: bpy.props.StringProperty(
@@ -3510,7 +3965,6 @@ class LOOM_OT_delete_bash_files(bpy.types.Operator):
     """Delete temporary bash file"""
     bl_idname = "loom.delete_bashfiles"
     bl_label = "Delete temporary Bash File"
-    bl_description = "Deletes temporary bash file"
     bl_options = {'INTERNAL'}
     
     def execute(self, context):
@@ -3538,7 +3992,6 @@ class LOOM_OT_delete_file(bpy.types.Operator):
     """Deletes a file by given path"""
     bl_idname = "loom.delete_file"
     bl_label = "Remove a File"
-    bl_description = "Delete file by given path"
     bl_options = {'INTERNAL'}
     
     file_path: bpy.props.StringProperty()
@@ -3569,6 +4022,7 @@ class LOOM_OT_utils_create_directory(bpy.types.Operator):
             return {'CANCELLED'}
         
         abs_path = bpy.path.abspath(self.directory)
+
         '''
         head, tail = os.path.split(abs_path)
         if not os.path.isdir(head):
@@ -3657,7 +4111,7 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
     bl_label = "Add Markers based on Selected Cameras"
     bl_options = {'REGISTER', 'UNDO'}
 
-    def playhead(self, context):
+    def set_playhead(self, context):
         if self.playhead:
             self.frame = context.scene.frame_current
         else:
@@ -3681,7 +4135,7 @@ class LOOM_OT_utils_marker_generate(bpy.types.Operator):
     playhead: bpy.props.BoolProperty(
         name = "Insert Markers at Playhead Position",
         default = False,
-        update=playhead)
+        update=set_playhead)
 
     @classmethod
     def poll(cls, context):
@@ -3743,7 +4197,6 @@ class LOOM_OT_select_project_directory(bpy.types.Operator, ExportHelper):
     """Select Project Directory using the File Browser"""
     bl_idname = "loom.select_project_directory"
     bl_label = "Project Directory"
-    bl_description = "Select Project Directory using File Browser"
 
     filename_ext = ""
     use_filter_folder = True
@@ -3856,6 +4309,155 @@ class LOOM_OT_project_dialog(bpy.types.Operator):
         layout.separator()
 
 
+class LOOM_OT_bake_globals(bpy.types.Operator):
+    """Apply Globals or Restore Filepaths"""
+    bl_idname = "loom.globals_bake"
+    bl_label = "Bake Globals"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    action: bpy.props.EnumProperty(
+        name="Action",
+        description="Apply or Restore Paths",
+        default = 'APPLY',
+        items=(
+            ('RESET', "Restore User Paths", "", "RECOVER_LAST", 1),
+            ('APPLY', "Apply Globals", "", "WORLD_DATA", 2)))
+
+    def out_nodes(self, scene):
+        tree = scene.node_tree
+        return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
+
+    def execute(self, context):
+        scn = context.scene    
+        prefs = context.preferences.addons[__name__].preferences
+        glob_vars = prefs.global_variable_coll
+        lum = scn.loom
+
+        '''
+        if any(ext in scn.render.filepath for ext in glob_vars.keys()):
+            scn.render.filepath = replace_globals(scn.render.filepath)
+        for node in self.out_nodes(scn):
+            node.base_path = replace_globals(node.base_path)
+            if "LAYER" in node.format.file_format:
+                for slot in node.layer_slots:
+                    slot.name = replace_globals(slot.name)
+            else:
+                for slot in node.file_slots:
+                    slot.path = replace_globals(slot.path)
+        # DEBUG
+        for i in lum.path_collection:
+            print (30*"-")
+            print (i.name)
+            print (i.orig, i.repl)
+            for s in i.slts:
+                print (s.orig, s.repl)
+        '''
+
+        if self.action == 'APPLY':
+            """ Main output path """
+            if any(ext in scn.render.filepath for ext in glob_vars.keys()):
+                item = lum.path_collection.get("Output Path")
+                if not item:
+                    item = lum.path_collection.add()
+                item.name = "Output Path" #item.id = 
+                item.orig = scn.render.filepath
+                item.repl = replace_globals(scn.render.filepath)
+                # Set the regular file path 
+                if item.repl: scn.render.filepath = item.repl
+
+            """ Output nodes """
+            for node in self.out_nodes(scn):
+                item = lum.path_collection.get(node.name)
+                if not item:
+                    item = lum.path_collection.add()
+                item.name = node.name
+                item.orig = node.base_path
+                item.repl = replace_globals(node.base_path)
+                # Set the base path
+                if item.repl: node.base_path = item.repl
+
+                if "LAYER" in node.format.file_format:
+                    for slot in node.layer_slots:
+                        slt = item.slts.get(slot.name)
+                        if not slt:
+                            slt = item.slts.add()
+                        slt.name = slot.name
+                        slt.orig = slot.name
+                        slt.repl = replace_globals(slot.name)
+                        # Set the slot name
+                        if slt.repl: slot.name = slt.repl
+                else:
+                    for slot in node.file_slots:
+                        slt = item.slts.get(slot.path)
+                        if not slt:
+                            slt = item.slts.add()
+                        slt.name = slot.path
+                        slt.orig = slot.path
+                        slt.repl = replace_globals(slot.path)
+                        if slt.repl: slot.path = slt.repl
+            self.report({'INFO'}, "Replaced all Globals")
+        
+        if self.action == 'RESET':
+            for i in lum.path_collection:
+                if i.name == "Output Path":
+                    scn.render.filepath = i.orig
+                else:
+                    node = scn.node_tree.nodes.get(i.name)
+                    if node:
+                        node.base_path = i.orig
+                        if "LAYER" in node.format.file_format:
+                            for slot in node.layer_slots:
+                                for o in i.slts:
+                                    if o.repl == slot.name:
+                                        slot.name = o.orig
+                        else:
+                            for slot in node.file_slots:
+                                for o in i.slts:
+                                    if o.repl == slot.path:
+                                        slot.path = o.orig
+            self.report({'INFO'}, "Reset all Paths")
+        return {'FINISHED'}
+
+
+class LOOM_OT_utils_framerange(bpy.types.Operator):
+    bl_idname = "loom.shot_range"
+    bl_label = "Set Shot Range"
+    bl_description = "Set Frame Range to 1001-1241"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    start: bpy.props.IntProperty(
+        name="Start Frame",
+        description="Custom start frame",
+        default=1001)
+    
+    end: bpy.props.IntProperty(
+        name="End Frame",
+        description="Custom end frame",
+        default=1241)
+
+    @classmethod
+    def poll(cls, context):
+        return context.area.type == 'DOPESHEET_EDITOR'
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=350)
+
+    def execute(self, context):
+        bpy.ops.action.view_all()
+        context.scene.frame_start = self.start
+        context.scene.frame_end = self.end
+        context.scene.frame_current = self.start
+        bpy.ops.action.view_all()
+        return{'FINISHED'}
+
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        row.prop(self, "start")
+        row.prop(self, "end")
+        layout.row()
+
+
 # -------------------------------------------------------------------
 #    Panels and Menus
 # -------------------------------------------------------------------
@@ -3867,14 +4469,15 @@ class LOOM_MT_render_menu(bpy.types.Menu):
     def draw(self, context):
         prefs = context.preferences.addons[__name__].preferences
         layout = self.layout
-        layout.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #RENDER_ANIMATION
-        layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode") #SEQ_LUMA_WAVEFORM
-        layout.operator(LOOM_OT_encode_dialog.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence") #FILE_MOVIE
+        layout.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #RENDER_ANIMATION, SEQ_LUMA_WAVEFORM
+        layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode") 
+        layout.operator(LOOM_OT_encode_dialog.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence")
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
         layout.separator()
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
+        layout.operator(LOOM_OT_rename_dialog.bl_idname, icon="SORTALPHA")
         layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
 
 def draw_loom_render_menu(self, context):
@@ -3917,43 +4520,61 @@ def draw_loom_version_number(self, context):
         row = layout.row(align=True)
         row.prop(context.scene.loom, "output_render_version") #NODE_COMPOSITING
         row.prop(context.scene.loom, "output_sync_comp", text="", toggle=True, icon="IMAGE_RGB_ALPHA")
-        
+        '''
         row = row.row(align=True)
         row.enabled = os.path.isdir(output_folder)
-        row.operator(LOOM_OT_open_folder.bl_idname, 
-                icon="DISK_DRIVE", text="").folder_path = output_folder
+        row.operator(LOOM_OT_open_folder.bl_idname, icon="DISK_DRIVE", text="").folder_path = output_folder
         #layout.separator()
+        '''
 
 
 def draw_loom_outputpath(self, context):
     """Append compiled file path using globals to the Output Area"""
+    if not context.scene.render.filepath:
+        return
+    scn = context.scene
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
-    fp = bpy.path.abspath(context.scene.render.filepath)
+    fp = bpy.path.abspath(scn.render.filepath)
     output_folder, file_name = os.path.split(fp)
-    user_globals = False
-
+    output_folder = os.path.realpath(output_folder)
+    globals_flag = False
+    
     if any(ext in file_name for ext in glob_vars.keys()):
         file_name = replace_globals(file_name)
-        user_globals = True
+        globals_flag = True
     if any(ext in output_folder for ext in glob_vars.keys()):
         output_folder = replace_globals(output_folder)
-        user_globals = True
+        globals_flag = True
     
-    if user_globals or not os.path.isdir(output_folder):
+    if not file_name and bpy.data.is_saved:
+        file_name = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
+    hashes = file_name.count('#')
+    if not hashes:
+        file_name = "{}{}".format(file_name, "#"*4)
+    
+    if file_name.endswith(tuple(scn.render.file_extension)):
         file_path = os.path.join(output_folder, file_name)
-        layout = self.layout
-        box = layout.box()
-        #layout.separator()
-        
-        row = box.row()
-        if not os.path.isdir(output_folder):
-            row.operator(LOOM_OT_utils_create_directory.bl_idname, 
-                icon="ERROR", text="", emboss=False).directory = os.path.dirname(file_path)
-        else:
-            row.operator(LOOM_OT_open_folder.bl_idname, 
-                icon="DISK_DRIVE", text="", emboss=False).folder_path = os.path.dirname(file_path)
-        row.label(text="{}".format(file_path))
-        layout.row()
+    else:
+        file_path = os.path.join(output_folder, "{}{}".format(file_name, scn.render.file_extension))
+
+    layout = self.layout
+    box = layout.box()
+    row = box.row()
+    
+    if not os.path.isdir(output_folder): #if globals_flag
+        row.operator(LOOM_OT_utils_create_directory.bl_idname, 
+            icon='ERROR', text="", emboss=False).directory = os.path.dirname(file_path)
+    else:
+        row.operator(LOOM_OT_open_output_folder.bl_idname, icon='DISK_DRIVE', text="", emboss=False)
+    row.label(text="{}".format(file_path))
+
+    if globals_flag or context.scene.loom.path_collection:
+        sub_row = row.row(align=True)
+        if len(context.scene.loom.path_collection):
+            sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="RECOVER_LAST", text="").action='RESET'
+        sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="WORLD_DATA", text="").action='APPLY'
+        #sub_row.operator_enum(LOOM_OT_bake_globals.bl_idname, "action", icon_only=True)
+    layout.row()
 
 
 def draw_loom_compositor_paths(self, context):
@@ -3968,13 +4589,21 @@ def draw_loom_compositor_paths(self, context):
             box = layout.box()
             row = box.row()
             row.label(text="Compositor Output Nodes", icon='NODETREE')
-            icon = 'COLLAPSEMENU' if lum.comp_image_settings else 'MODIFIER'
-            row.prop(lum, "comp_image_settings", icon=icon, text="")
+            icon = 'MODIFIER' if lum.comp_image_settings else 'MODIFIER_DATA'
+            row.prop(lum, "comp_image_settings", icon=icon, text="", emboss=False)
                     
             for o in output_nodes:
                 row = box.row()
                 i = "IMAGE_PLANE" if o.format.file_format == 'OPEN_EXR_MULTILAYER' else "RENDERLAYERS"
                 row.prop(o, "base_path", text="{}".format(o.name), icon=i)
+                '''
+                if not os.path.isdir(o.base_path):
+                    row.operator(LOOM_OT_utils_create_directory.bl_idname, 
+                        icon='ERROR', text="", emboss=False).directory = os.path.dirname(o.base_path)
+                '''
+                row.operator(LOOM_OT_open_folder.bl_idname, 
+                    icon='DISK_DRIVE', text="", emboss=False).folder_path = os.path.dirname(o.base_path)
+
                 if lum.comp_image_settings:
                     col = box.column()
                     col.template_image_settings(o.format, color_management=False)
@@ -4009,7 +4638,11 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         col = layout.column()
 
 def draw_loom_dopesheet(self, context):
-    row = self.layout.row(align=True)
+    layout = self.layout
+    if context.space_data.mode == 'TIMELINE':
+        row = layout.row()
+        row.operator(LOOM_OT_utils_framerange.bl_idname, text="", icon='TRACKING_FORWARDS_SINGLE')
+    row = layout.row()
     row.separator()
     row.popover(panel="LOOM_PT_dopesheet", text="", icon='SEQUENCE')
 
@@ -4050,6 +4683,8 @@ classes = (
     LOOM_OT_globals_ui,
     LOOM_OT_directories_ui,
     LOOM_PG_render,
+    LOOM_PG_slots,
+    LOOM_PG_paths,
     LOOM_PG_batch_render,
     LOOM_PG_scene_settings,
     LOOM_OT_render_threads,
@@ -4063,6 +4698,7 @@ classes = (
     LOOM_MT_display_settings,
     LOOM_UL_batch_list,
     LOOM_OT_batch_dialog,
+    LOOM_OT_batch_snapshot,
     LOOM_OT_batch_selected_blends,
     LOOM_OT_scan_blends,
     LOOM_OT_batch_list_actions,
@@ -4073,6 +4709,7 @@ classes = (
     LOOM_OT_batch_default_range,
     LOOM_OT_batch_verify_input,
     LOOM_OT_encode_dialog,
+    LOOM_OT_rename_dialog,
     LOOM_OT_load_image_sequence,
     LOOM_OT_encode_select_movie,
     LOOM_OT_encode_verify_image_sequence,
@@ -4098,6 +4735,8 @@ classes = (
     LOOM_OT_utils_marker_generate,
     LOOM_OT_select_project_directory,
     LOOM_OT_project_dialog,
+    LOOM_OT_bake_globals,
+    LOOM_OT_utils_framerange,
     LOOM_MT_render_menu,
     LOOM_MT_marker_menu,
     LOOM_PT_dopesheet
@@ -4120,11 +4759,15 @@ def register():
             kmi.active = True
             addon_keymaps.append((km, kmi))
 
-        kmi = km.keymap_items.new(LOOM_OT_open_output_folder.bl_idname, 'F3', 'PRESS', ctrl=True, shift=True)
+        kmi = km.keymap_items.new(LOOM_OT_project_dialog.bl_idname, 'F1', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
 
-        kmi = km.keymap_items.new(LOOM_OT_project_dialog.bl_idname, 'F1', 'PRESS', ctrl=True, shift=True)
+        kmi = km.keymap_items.new(LOOM_OT_rename_dialog.bl_idname, 'F2', 'PRESS', ctrl=True, shift=True)
+        kmi.active = True
+        addon_keymaps.append((km, kmi))
+
+        kmi = km.keymap_items.new(LOOM_OT_open_output_folder.bl_idname, 'F3', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
 
