@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 0),
+    "version": (0, 8, 1),
     "blender": (2, 82, 0),
     "warning": "",
     "wiki_url": "https://github.com/p2or/blender-loom",
