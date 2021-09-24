@@ -782,6 +782,11 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         description="Send frames to Command Line (background process)",
         default=False)
 
+    is_rendering: bpy.props.BoolProperty(
+        name="Render Flag",
+        description="Determine whether Loom is rendering",
+        default=False)
+
     override_threads: bpy.props.BoolProperty(
         name="Override CPU thread count",
         description="Force to render with specified thread count (CPU)",
@@ -3198,6 +3203,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
     def pre_render(self, scene, depsgraph):
         self._rendering = True
+        scene.loom.is_rendering = True
 
     def cancel_render(self, scene, depsgraph):
         self._stop = True
@@ -3207,6 +3213,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
     def post_render(self, scene, depsgraph):
         self._frames.pop(0)
         self._rendering = False
+        scene.loom.is_rendering = False
         
     def file_extension(self, file_format):
         return self._image_formats[file_format]
@@ -4361,9 +4368,10 @@ class LOOM_OT_bake_globals(bpy.types.Operator):
                     item = lum.path_collection.add()
                 item.name = "Output Path" #item.id = 
                 item.orig = scn.render.filepath
-                item.repl = replace_globals(scn.render.filepath)
+                compiled_path = replace_globals(scn.render.filepath)
+                item.repl = compiled_path
                 # Set the regular file path 
-                if item.repl: scn.render.filepath = item.repl
+                scn.render.filepath = compiled_path
 
             """ Output nodes """
             for node in self.out_nodes(scn):
@@ -4548,8 +4556,9 @@ def draw_loom_outputpath(self, context):
     
     if not file_name and bpy.data.is_saved:
         file_name = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
+
     hashes = file_name.count('#')
-    if not hashes:
+    if not hashes and not scn.loom.is_rendering:
         file_name = "{}{}".format(file_name, "#"*4)
     
     if file_name.endswith(tuple(scn.render.file_extension)):
