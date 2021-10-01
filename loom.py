@@ -3003,7 +3003,13 @@ class LOOM_OT_open_output_folder(bpy.types.Operator):
     bl_options = {'REGISTER'}
     
     def execute(self, context):
-        fp = os.path.dirname(context.scene.render.filepath)
+        fp = os.path.dirname(
+            os.path.realpath(
+                bpy.path.abspath(
+                    context.scene.render.filepath
+                )
+            )
+        )
         if not os.path.isdir(fp):
             self.report({'INFO'}, "Folder does not exist")
             return {"CANCELLED"}
