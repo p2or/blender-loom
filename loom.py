@@ -1422,10 +1422,12 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
                     info = "Encoding {} will be skipped [Missing Frames]".format(item.name)
                     self.report({'INFO'}, info)
 
+            """
             out_folder, out_filename = os.path.split(bpy.path.abspath(context.scene.render.filepath))
             if not self.write_permission(os.path.realpath(out_folder)):
                 self.report({'ERROR'}, "Specified output folder does not exist (permission denied)")
                 user_error = True
+            """
 
         if len(black_list) > 1:
             self.report({'ERROR'}, "Can not encode: {} (missing frames)".format(", ".join(black_list)))
