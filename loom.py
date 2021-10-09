@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 1),
+    "version": (0, 8, 2),
     "blender": (2, 82, 0),
     "warning": "",
     "wiki_url": "https://github.com/p2or/blender-loom",
@@ -1757,7 +1757,7 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
         added = []
         for i in self.files:
             try: # https://blender.stackexchange.com/a/55503/3710
-                path_to_file = (os.path.join(folder, i.name))
+                path_to_file = os.path.join(folder, i.name)
                 data = blend_render_info.read_blend_rend_chunk(path_to_file)
                 start, end, sc = data[0]
                 item = lum.batch_render_coll.add()
@@ -4768,37 +4768,57 @@ def register():
     bpy.types.Scene.loom = bpy.props.PointerProperty(type=LOOM_PG_scene_settings)
 
     """ Hotkey registration """
+    playblast = bpy.context.preferences.addons[__name__].preferences.playblast_flag
     kc = bpy.context.window_manager.keyconfigs.addon
     if kc:
         km = kc.keymaps.new(name="Screen", space_type='EMPTY')
-        if bpy.context.preferences.addons[__name__].preferences.playblast_flag:
+        if playblast:
             kmi = km.keymap_items.new(LOOM_OT_playblast.bl_idname, 'F11', 'PRESS', ctrl=True, shift=True)
             kmi.active = True
             addon_keymaps.append((km, kmi))
-
         kmi = km.keymap_items.new(LOOM_OT_project_dialog.bl_idname, 'F1', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
-
         kmi = km.keymap_items.new(LOOM_OT_rename_dialog.bl_idname, 'F2', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
-
         kmi = km.keymap_items.new(LOOM_OT_open_output_folder.bl_idname, 'F3', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
-
         kmi = km.keymap_items.new(LOOM_OT_encode_dialog.bl_idname, 'F9', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
-
         kmi = km.keymap_items.new(LOOM_OT_batch_dialog.bl_idname, 'F12', 'PRESS', ctrl=True, shift=True, alt=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
-
         kmi = km.keymap_items.new(LOOM_OT_render_dialog.bl_idname, 'F12', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
+
+        if platform.startswith('darwin'):
+            if playblast:
+                kmi = km.keymap_items.new(LOOM_OT_playblast.bl_idname, 'F11', 'PRESS', oskey=True, shift=True)
+                kmi.active = True
+                addon_keymaps.append((km, kmi))
+            kmi = km.keymap_items.new(LOOM_OT_project_dialog.bl_idname, 'F1', 'PRESS', oskey=True, shift=True)
+            kmi.active = True
+            addon_keymaps.append((km, kmi))
+            kmi = km.keymap_items.new(LOOM_OT_rename_dialog.bl_idname, 'F2', 'PRESS', oskey=True, shift=True)
+            kmi.active = True
+            addon_keymaps.append((km, kmi))
+            kmi = km.keymap_items.new(LOOM_OT_open_output_folder.bl_idname, 'F3', 'PRESS', oskey=True, shift=True)
+            kmi.active = True
+            addon_keymaps.append((km, kmi))
+            kmi = km.keymap_items.new(LOOM_OT_encode_dialog.bl_idname, 'F9', 'PRESS', oskey=True, shift=True)
+            kmi.active = True
+            addon_keymaps.append((km, kmi))
+            kmi = km.keymap_items.new(LOOM_OT_batch_dialog.bl_idname, 'F12', 'PRESS', oskey=True, shift=True, alt=True)
+            kmi.active = True
+            addon_keymaps.append((km, kmi))
+            kmi = km.keymap_items.new(LOOM_OT_render_dialog.bl_idname, 'F12', 'PRESS', oskey=True, shift=True)
+            kmi.active = True
+            addon_keymaps.append((km, kmi))
+
 
     """ Globals """
     glob = bpy.context.preferences.addons[__name__].preferences.global_variable_coll
