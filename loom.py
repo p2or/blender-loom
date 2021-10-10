@@ -2978,7 +2978,14 @@ class LOOM_OT_open_folder(bpy.types.Operator):
     folder_path: bpy.props.StringProperty()
     
     def execute(self, context):
-        fp = os.path.realpath(bpy.path.abspath(self.folder_path))
+        fp = self.folder_path
+        glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
+        if any(ext in fp for ext in glob_vars.keys()):
+            fp = replace_globals(fp)
+        
+        fp = os.path.realpath(bpy.path.abspath(fp))
+        if os.path.isfile(fp) or not os.path.exists(fp):
+            fp = os.path.dirname(fp)
         if not os.path.isdir(fp):
             self.report({'INFO'}, "'{}' does not exist".format(fp))
             return {"CANCELLED"}
@@ -3005,18 +3012,19 @@ class LOOM_OT_open_output_folder(bpy.types.Operator):
     bl_options = {'REGISTER'}
     
     def execute(self, context):
-        fp = os.path.dirname(
-            os.path.realpath(
-                bpy.path.abspath(
-                    context.scene.render.filepath
-                )
-            )
-        )
-        if not os.path.isdir(fp):
-            self.report({'INFO'}, "Folder does not exist")
-            return {"CANCELLED"}
+        fp = context.scene.render.filepath
+        glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
+        if any(ext in fp for ext in glob_vars.keys()):
+            fp = replace_globals(fp)
 
-        bpy.ops.loom.open_folder(folder_path=fp)
+        fp = os.path.realpath(bpy.path.abspath(fp))
+        if not os.path.isdir(fp):
+            fp = os.path.dirname(fp)
+        if os.path.isdir(fp):
+            bpy.ops.loom.open_folder(folder_path=fp)
+        else:
+            bpy.ops.loom.open_folder(folder_path=bpy.path.abspath("//"))
+            self.report({'INFO'}, "Folder does not exist")
         return {'FINISHED'}
 
 
@@ -4619,7 +4627,7 @@ def draw_loom_compositor_paths(self, context):
                         icon='ERROR', text="", emboss=False).directory = os.path.dirname(o.base_path)
                 '''
                 row.operator(LOOM_OT_open_folder.bl_idname, 
-                    icon='DISK_DRIVE', text="", emboss=False).folder_path = os.path.dirname(o.base_path)
+                    icon='DISK_DRIVE', text="", emboss=False).folder_path = o.base_path
 
                 if lum.comp_image_settings:
                     col = box.column()
@@ -4679,6 +4687,8 @@ global_var_defaults = {
     "$LENS": '"{:0.0f}mm".format(bpy.context.scene.camera.data.lens)',
     "$VIEWLAYER": 'bpy.context.view_layer.name',
     "$MARKER": 'next((i.name for i in bpy.context.scene.timeline_markers if i.frame == bpy.context.scene.frame_current), "NO_NAME")',
+    "$COLL": 'bpy.context.collection.name',
+    "$OB": 'bpy.context.active_object.name',
     "$SUM": 'str(sum([8, 16, 32]))'
 }
 
