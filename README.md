@@ -6,7 +6,9 @@ Loom is a blender addon designed to simplify the process of rendering *image seq
 
 Using this dialog allows to render quite complex **frame ranges**, **single frames**, **subframes** as well as **exclude** frames and ranges without manipulating the *Timeline*, in the background (optional).
 
-![Render Image Sequence Dialog](https://i.stack.imgur.com/ppHBr.jpg)
+<!-- ![Render Image Sequence Dialog](https://i.stack.imgur.com/ppHBr.jpg) -->
+<img width="475" alt="loom" src="https://user-images.githubusercontent.com/512368/141286862-8e094f3f-4713-4089-a05c-80a7f87ad2a0.png">
+
 
 For example, you can enter `1, 2, 3, 5-10` to render only those frames. In order to exclude e.g. frame `7` from `1-10` range, just add a *caret* or *exclamation mark* followed by the number, like `^7` to render frame `1-6, 8-10` (similar when specifying multiple ranges on the command line).
 
@@ -36,10 +38,15 @@ You can also render **every nth frame** of the scene by adding `x` followed by a
 
  - You can **verify the output** before rendering the animation by clicking the *Verify Output* operator ![I1](https://i.stack.imgur.com/JovW0.jpg), which reports all frames that are going to be rendered (in the *Info Area* as well as in the terminal)
  - You can enable *Filtering* ![I1](https://i.stack.imgur.com/lKqJq.jpg) to handle each number after the caret (`^`) separatly, this allows to **add single frames** or frame ranges **right after any excluded frame**, e.g. `1-10 23 ^3-7 4 6` renders `1, 2, 4, 6, 8, 9, 10, 23` instead of `1, 2, 8, 9, 10, 23` if the property is disabled
- - You can **render specific keyframes** by selecting the keys in the *Dope Sheet* or the *Graph Editor* and calling *Render Selected Keyframes* operator via <kbd>F3</kbd>, which automatically adds the frames to the render list:
+ - You can **render specific keyframes** by selecting the keys in the *Timeline*, *Dope Sheet* or the *Graph Editor* and use the popover in the header of each area to call *Render Selected Keyframes* operator which automatically adds the frames to the render list:
  
-   ![Render Selected Keyframes](https://i.stack.imgur.com/PUs71.jpg)
- 
+    <!--![Render Selected Keyframes](https://i.stack.imgur.com/PUs71.jpg) -->
+    <!-- <img width="608" alt="popover" src="https://user-images.githubusercontent.com/512368/141284257-1f380f00-feb4-40eb-9f64-64df67903edb.png"> -->
+    <img width="1440" alt="popover" src="https://user-images.githubusercontent.com/512368/141284381-80695c90-a6cb-4dcd-9f12-d068ec16b8f0.png">
+    
+    *Tip:* If [Developer Extras](https://docs.blender.org/manual/en/latest/editors/preferences/interface.html) is enabled in the preferences, you can also press <kbd>F3</kbd> and type *Render selected keyframes...* 
+
+
 ## Encode Image Sequence Dialog <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F9</kbd>
 
 If [FFmpeg](https://www.ffmpeg.org/) is installed on your machine and set up properly in the *Addon Preferences*, this dialog allows to encode image sequences to [ProRes](https://en.wikipedia.org/wiki/Apple_ProRes) or [DNxHD](https://en.wikipedia.org/wiki/Avid_DNxHD)/[DNxHR](https://en.wikipedia.org/wiki/DNxHR_codec) for preview or layout purposes. You can select any image sequence, set the output colorspace (useful for encoding linear exr sequences), the frame rate and the desired codec.
