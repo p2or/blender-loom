@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 2),
+    "version": (0, 8, 3),
     "blender": (2, 82, 0),
     "warning": "",
     "wiki_url": "https://github.com/p2or/blender-loom",
@@ -2987,7 +2987,7 @@ class LOOM_OT_open_folder(bpy.types.Operator):
         if os.path.isfile(fp) or not os.path.exists(fp):
             fp = os.path.dirname(fp)
         if not os.path.isdir(fp):
-            self.report({'INFO'}, "'{}' does not exist".format(fp))
+            self.report({'INFO'}, "'{}' no folder".format(fp))
             return {"CANCELLED"}
         try:
             if platform.startswith('darwin'):
@@ -4502,7 +4502,8 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
         layout.operator(LOOM_OT_rename_dialog.bl_idname, icon="SORTALPHA")
-        layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
+        if bpy.app.version < (3, 0, 0): # Test again, if released
+            layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
 
 def draw_loom_render_menu(self, context):
     layout = self.layout
@@ -4854,13 +4855,15 @@ def register():
     bpy.types.RENDER_PT_output.prepend(draw_loom_outputpath)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_compositor_paths)
-    bpy.types.TOPBAR_MT_app.append(draw_loom_project)
     bpy.types.DOPESHEET_HT_header.append(draw_loom_dopesheet)
-    
+    if bpy.app.version >= (3, 0, 0):
+        bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
+    else:
+        bpy.types.TOPBAR_MT_app.append(draw_loom_project)
+
 
 def unregister():
     bpy.types.DOPESHEET_HT_header.remove(draw_loom_dopesheet)
-    bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
     bpy.types.RENDER_PT_output.remove(draw_loom_compositor_paths)
     bpy.types.RENDER_PT_output.remove(draw_loom_outputpath)
     bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
@@ -4868,7 +4871,10 @@ def unregister():
     bpy.types.DOPESHEET_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TOPBAR_MT_render.remove(draw_loom_render_menu)
-    
+    if bpy.app.version >= (3, 0, 0):
+        bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
+    else:
+        bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
     
     from bpy.utils import unregister_class
     for cls in reversed(classes):
