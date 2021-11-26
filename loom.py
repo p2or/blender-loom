@@ -38,8 +38,7 @@ bl_info = {
     "author": "Christian Brinkmann (p2or)",
     "version": (0, 8, 3),
     "blender": (2, 82, 0),
-    "warning": "",
-    "wiki_url": "https://github.com/p2or/blender-loom",
+    "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
     "support": "COMMUNITY",
     "category": "Render"
