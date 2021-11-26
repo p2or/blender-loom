@@ -4573,7 +4573,7 @@ def draw_loom_outputpath(self, context):
     if not file_name and bpy.data.is_saved:
         file_name = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
 
-    if not file_name.endswith("_"): 
+    if file_name and not file_name.endswith("_"): 
         file_name += "_"
 
     hashes = file_name.count('#')
