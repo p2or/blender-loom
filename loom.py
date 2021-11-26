@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 3),
+    "version": (0, 8, 4),
     "blender": (2, 82, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
@@ -4573,6 +4573,9 @@ def draw_loom_outputpath(self, context):
     if not file_name and bpy.data.is_saved:
         file_name = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
 
+    if not file_name.endswith("_"): 
+        file_name += "_"
+
     hashes = file_name.count('#')
     if not hashes and not scn.loom.is_rendering:
         file_name = "{}{}".format(file_name, "#"*4)
@@ -4591,6 +4594,7 @@ def draw_loom_outputpath(self, context):
             icon='ERROR', text="", emboss=False).directory = os.path.dirname(file_path)
     else:
         row.operator(LOOM_OT_open_output_folder.bl_idname, icon='DISK_DRIVE', text="", emboss=False)
+
     row.label(text="{}".format(file_path))
 
     if globals_flag or context.scene.loom.path_collection:
@@ -4605,7 +4609,7 @@ def draw_loom_outputpath(self, context):
 def draw_loom_compositor_paths(self, context):
     """Display File Output paths to the Output Area"""
     scene = context.scene
-    if hasattr(scene.node_tree, "nodes"):
+    if hasattr(scene.node_tree, "nodes") and scene.render.use_compositing:
         output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
         if len(output_nodes) > 0:
             lum = scene.loom
