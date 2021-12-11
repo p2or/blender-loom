@@ -4573,13 +4573,10 @@ def draw_loom_outputpath(self, context):
     if not file_name and bpy.data.is_saved:
         file_name = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
 
-    if file_name and not file_name.endswith("_"): 
-        file_name += "_"
-
     hashes = file_name.count('#')
     if not hashes and not scn.loom.is_rendering:
         file_name = "{}{}".format(file_name, "#"*4)
-    
+
     if file_name.endswith(tuple(scn.render.file_extension)):
         file_path = os.path.join(output_folder, file_name)
     else:
