@@ -1097,6 +1097,8 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     bl_label = "Render Selected Keyframes"
     bl_options = {'REGISTER'}
 
+    limit_to_selection: bpy.props.BoolProperty(options={'SKIP_SAVE'})
+
     def int_filter(self, flt):
         try:
             return int(flt)
@@ -1108,19 +1110,38 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
         return ",".join("-".join(map(str,(g[0],g[-1])[:len(g)])) for g in G)
 
-    def selected_ctrl_points(self, context):
+    def all_selected_ctrl_points(self, context):
         """ Returns all selected keys in dopesheet """
+        actions = bpy.data.actions
+        if self.limit_to_selection:
+            actions = [i.animation_data.action for i in context.selected_objects if i.animation_data]
         # There is a select flag for the handles:
         # key.select_left_handle & key.select_right_handle
         ctrl_points = set()
-        for action in bpy.data.actions:
-            for channel in action.fcurves: 
-                #if channel.select:
-                for key in channel.keyframe_points:       
+        for action in actions:
+            for channel in action.fcurves: #if channel.select:
+                for key in channel.keyframe_points: 
                     if key.select_control_point:
                         ctrl_points.add(key.co.x)
         return sorted(ctrl_points)
     
+    def keyframes_from_action(self, context, action):
+        """Returns selected keys based on the action in the action editor"""
+        ctrl_points = set()
+        for channel in action.fcurves:
+            for key in channel.keyframe_points:
+                if key.select_control_point:
+                    ctrl_points.add(key.co.x)
+        return sorted(ctrl_points)
+
+    def selected_ctrl_points(self, context):
+        """Returns selected keys in the dopesheet if a channel is selected"""
+        ctrl_points = set()
+        for sel_keyframe in context.selected_editable_keyframes:
+            if sel_keyframe.select_control_point:
+                    ctrl_points.add(sel_keyframe.co.x)
+        return sorted(ctrl_points)
+
     def channel_ctrl_points(self, context):
         """Returns all keys of selected channels in dopesheet"""
         ctrl_points = set()
@@ -1134,7 +1155,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     def selected_gpencil_frames(self, context):
         """ Returns all selected grease pencil frames """
         ctrl_points = set()
-        for o in context.scene.objects:
+        for o in context.selected_objects:
             if o.type == 'GPENCIL':
                 for l in o.data.layers:
                     for f in l.frames:
@@ -1151,31 +1172,38 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         '''
         return context.space_data.type in editors and \
             not context.scene.render.is_movie_format
-        
+    
+    def invoke(self, context, event):
+        if event.alt:
+            self.limit_to_selection = True
+        return self.execute(context)
+
     def execute(self, context):
         space = context.space_data #print (space.type)
 
         selected_keys = None
         if space.type == 'DOPESHEET_EDITOR':
             mode = context.space_data.mode
-            
+
             if mode == 'GPENCIL':
                 selected_keys = self.selected_gpencil_frames(context)
-                
+            
+            elif mode == 'ACTION':
+                selected_keys = self.keyframes_from_action(context, space.action)
+
             elif mode == 'MASK':
-                # bpy.data.masks['Mask'].animation_data is empty
                 self.report({'ERROR'}, "Not implemented.")
                 return {"CANCELLED"}
             
             elif mode == 'CACHEFILE':
                 self.report({'ERROR'}, "Not implemented.")
                 return {"CANCELLED"}
-            
-            else: # Mode can be: DOPESHEET, ACTION, 'SHAPEKEY'
-                selected_keys = self.selected_ctrl_points(context) 
+
+            else: # Mode can be: DOPESHEET, 'SHAPEKEY'
+                selected_keys = self.all_selected_ctrl_points(context)
                 
         elif space.type == 'GRAPH_EDITOR':
-            selected_keys = self.selected_ctrl_points(context) 
+            selected_keys = self.all_selected_ctrl_points(context)
         
         if not selected_keys:
             self.report({'ERROR'}, "No keyframes to render.")
