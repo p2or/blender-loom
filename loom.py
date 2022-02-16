@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 4),
+    "version": (0, 8, 5),
     "blender": (2, 82, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
@@ -847,8 +847,8 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         default=True)
 
     comp_image_settings: bpy.props.BoolProperty(
-        name="Dislay Image Settings",
-        description="Dislay Image Settings of each File Output Node",
+        name="Display Image Settings",
+        description="Display Image Settings of each File Output Node",
         default=False)
 
     project_directory: bpy.props.StringProperty(
@@ -859,6 +859,16 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
     path_collection: bpy.props.CollectionProperty(
         name="Globals Path Collection",
         type=LOOM_PG_paths)
+
+    all_keyframes_flag: bpy.props.BoolProperty(
+        name="Scene Keyframes",
+        description="Add selected Keyframes of all Objects to the list",
+        default=False)
+
+    all_markers_flag: bpy.props.BoolProperty(
+        name="All Markers",
+        description="Add all Markers to the list",
+        default=False)
 
 
 # -------------------------------------------------------------------
@@ -1097,7 +1107,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     bl_label = "Render Selected Keyframes"
     bl_options = {'REGISTER'}
 
-    limit_to_selection: bpy.props.BoolProperty(options={'SKIP_SAVE'})
+    scene_objects: bpy.props.BoolProperty(options={'SKIP_SAVE'})
 
     def int_filter(self, flt):
         try:
@@ -1113,7 +1123,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     def all_selected_ctrl_points(self, context):
         """ Returns all selected keys in dopesheet """
         actions = bpy.data.actions
-        if self.limit_to_selection:
+        if not self.scene_objects:
             actions = [i.animation_data.action for i in context.selected_objects if i.animation_data]
         # There is a select flag for the handles:
         # key.select_left_handle & key.select_right_handle
@@ -1175,11 +1185,11 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     
     def invoke(self, context, event):
         if event.alt:
-            self.limit_to_selection = True
+            self.scene_objects = True
         return self.execute(context)
 
     def execute(self, context):
-        space = context.space_data #print (space.type)
+        space = context.space_data
 
         selected_keys = None
         if space.type == 'DOPESHEET_EDITOR':
@@ -1206,7 +1216,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
             selected_keys = self.all_selected_ctrl_points(context)
         
         if not selected_keys:
-            self.report({'ERROR'}, "No keyframes to render.")
+            self.report({'ERROR'}, "No Keyframes assigned to the object(s) in selection.")
             return {"CANCELLED"}
 
         """ Return integers whenever possible """
@@ -1223,6 +1233,8 @@ class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
     bl_label = "Render Selected Markers"
     bl_options = {'REGISTER'}
 
+    all_markers: bpy.props.BoolProperty(options={'SKIP_SAVE'})
+
     def rangify_frames(self, frames):
         """ Converts a list of integers to range string [1,2,3] -> '1-3' """
         G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
@@ -1234,13 +1246,25 @@ class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
         return context.space_data.type in editors and \
             not context.scene.render.is_movie_format
 
+    def invoke(self, context, event):
+        if event.alt:
+            self.all_markers = True
+        return self.execute(context)
+
     def execute(self, context):
-        selected_markers = sorted(m.frame for m in context.scene.timeline_markers if m.select)
-        if not selected_markers:
-            self.report({'ERROR'}, "No markers to render.")
+        if not self.all_markers:
+            markers = sorted(m.frame for m in context.scene.timeline_markers if m.select)
+        else:
+            markers = sorted(m.frame for m in context.scene.timeline_markers)
+
+        if not markers:
+            if not self.all_markers:
+                self.report({'ERROR'}, "Select any Marker to add or enable 'All Markers'.")
+            else:
+                self.report({'ERROR'}, "No Markers to add.")
             return {"CANCELLED"}
 
-        bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(selected_markers))
+        bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(markers))
         return {'FINISHED'}
 
 
@@ -4685,8 +4709,16 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         col = layout.column()
         col.label(text="Loom", icon='RENDER_STILL')
         col = layout.column()
-        col.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA')
-        col.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT')
+        
+        row = col.row(align=True)
+        kf_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Keyframes")
+        kf_op.scene_objects = context.scene.loom.all_keyframes_flag
+        row.prop(context.scene.loom, "all_keyframes_flag", icon="SCENE_DATA", text="")
+
+        row = col.row(align=True)
+        m_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Markers")
+        m_op.all_markers = context.scene.loom.all_markers_flag #PMARKER_SEL
+        row.prop(context.scene.loom, "all_markers_flag", icon="TIME", text="")
         col.separator()
         col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
         col = layout.column()
