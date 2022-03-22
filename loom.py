@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 5),
+    "version": (0, 8, 6),
     "blender": (2, 82, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
@@ -4711,14 +4711,16 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         col = layout.column()
         
         row = col.row(align=True)
-        kf_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, icon='SHAPEKEY_DATA', text="Render Keyframes")
-        kf_op.scene_objects = context.scene.loom.all_keyframes_flag
-        row.prop(context.scene.loom, "all_keyframes_flag", icon="SCENE_DATA", text="")
-
+        row.prop(context.scene.loom, "all_keyframes_flag", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
+        ka_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, text="Render Selected Keyframes")
+        ka_op.scene_objects = context.scene.loom.all_keyframes_flag
+        
         row = col.row(align=True)
-        m_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, icon='PMARKER_ACT', text="Render Markers")
-        m_op.all_markers = context.scene.loom.all_markers_flag #PMARKER_SEL
-        row.prop(context.scene.loom, "all_markers_flag", icon="TIME", text="")
+        row.prop(context.scene.loom, "all_markers_flag", icon="TEMP", text="") #"TIME"
+        ma_txt = "Render All Markers" if context.scene.loom.all_markers_flag else "Render Active Markers"
+        ma_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=ma_txt) # icon='PMARKER_ACT',
+        ma_op.all_markers = context.scene.loom.all_markers_flag #PMARKER_SEL
+        
         col.separator()
         col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
         col = layout.column()
