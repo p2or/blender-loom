@@ -1289,6 +1289,7 @@ def codec_callback(scene, context):
     ]
     return codec
 
+
 def colorspace_callback(scene, context):
     colorspace = [
         ('iec61966_2_1', "sRGB", ""),
@@ -1379,6 +1380,31 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         name="Shutdown",
         description="Shutdown when done",
         default=False)
+
+    settings: bpy.props.BoolProperty(
+        name="Override Render Settings",
+        default=False)
+
+    engine: bpy.props.EnumProperty(
+        name="Engine",
+        description="Render Engine",
+        items=[
+            ("DEFAULT", "Default Engine", ""),
+            ("CYCLES", "Cycles", ""),
+            ("BLENDER_EEVEE", "Eevee", ""),
+            ("BLENDER_WORKBENCH", "Workbench", "")
+        ])
+
+    file_format: bpy.props.EnumProperty(
+        name="File Format",
+        description="File Format",
+        items=[
+            ("DEFAULT", "Default File Format", ""),
+            ("JPEG", "JPG", ""),
+            ("OPEN_EXR", "OpenEXR", ""),
+            ("TIFF", "Tiff", ""),
+            ("PNG", "PNG", "")
+        ])
 
     def determine_type(self, val): #val = ast.literal_eval(s)
         if (isinstance(val, int)):
@@ -1495,15 +1521,18 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             python_expr = ("import bpy;" +\
                     "bpy.ops.render.image_sequence(" +\
                     "frames='{fns}', isolate_numbers={iel}," +\
-                    "render_silent={cli});" +\
+                    "render_silent={cli}, render_engine='{eng}', render_format='{ff}');" +\
                     "bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)").format(
                         fns=item.frames,
-                        iel=item.input_filter, 
+                        iel=item.input_filter,
+                        eng=self.engine,
+                        ff=self.file_format,
                         cli=True)
-
+            
             cli_args = [bpy.app.binary_path, "-b", item.path, "--python-expr", python_expr]
             cli_arg_dict[c] = cli_args
 
+        """ Encoding """
         coll_len = len(cli_arg_dict)
         for c, item in enumerate(lum.batch_render_coll):
             if item.encode_flag and item.name not in black_list:
@@ -1602,6 +1631,16 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         layout.row() # Seperator
         row = layout.row() #if platform.startswith('win32'):
         row.prop(self, "shutdown", text="Shutdown when done")
+        settings_icon = 'MODIFIER_ON' if self.settings else 'MODIFIER_OFF'
+        row.prop(self, "settings", icon=settings_icon, text="", emboss=False)
+                
+        if self.settings:
+            row = layout.row()
+            row = layout.row()
+            row.prop(self, "engine", text="Render Engine")
+            row = layout.row()
+            row.prop(self, "file_format", text="File Format")
+            row = layout.row()
         row = layout.row()
 
 
@@ -3176,6 +3215,29 @@ class LOOM_OT_render_terminal(bpy.types.Operator):
         description="Filter raw elements in frame input",
         default=False)
 
+    render_engine: bpy.props.EnumProperty(
+        name="Render Engine",
+        description="Render Engine",
+        options={'SKIP_SAVE'},
+        default="DEFAULT",
+        items=[
+            ("DEFAULT", "Default Engine", ""),
+            ("CYCLES", "Cycles", ""),
+            ("BLENDER_EEVEE", "Eevee", ""),
+            ("BLENDER_WORKBENCH", "Workbench", "")
+        ])
+
+    render_format: bpy.props.EnumProperty(
+        name="File Format",
+        description="File Format",
+        items=[
+            ("DEFAULT", "Default File Format", ""),
+            ("JPEG", "JPG", ""),
+            ("OPEN_EXR", "OpenEXR", ""),
+            ("TIFF", "Tiff", ""),
+            ("PNG", "PNG", "")
+        ])
+
     debug: bpy.props.BoolProperty(
         name="Debug Arguments",
         description="Print full argument list",
@@ -3207,10 +3269,13 @@ class LOOM_OT_render_terminal(bpy.types.Operator):
         python_expr = ("import bpy;" +\
                 "bpy.ops.render.image_sequence(" +\
                 "frames='{fns}', isolate_numbers={iel}," +\
-                "render_silent={cli}, digits={lzs})").format(
+                "render_silent={cli}, render_engine='{eng}'," +\
+                "render_format='{ff}', digits={lzs})").format(
                     fns=self.frames,
                     iel=self.isolate_numbers, 
-                    cli=True, 
+                    cli=True,
+                    eng=self.render_engine,
+                    ff=self.render_format,
                     lzs=self.digits)
 
         cli_args = ["-b", bpy.data.filepath, "--python-expr", python_expr]
@@ -3248,6 +3313,29 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         description="Render without displaying the progress within the UI",
         default=False)
 
+    render_engine: bpy.props.EnumProperty(
+        name="Render Engine",
+        description="Render Engine",
+        options={'SKIP_SAVE'},
+        default="DEFAULT",
+        items=[
+            ("DEFAULT", "Default Engine", ""),
+            ("CYCLES", "Cycles", ""),
+            ("BLENDER_EEVEE", "Eevee", ""),
+            ("BLENDER_WORKBENCH", "Workbench", "")
+        ])
+
+    render_format: bpy.props.EnumProperty(
+        name="File Format",
+        description="File Format",
+        items=[
+            ("DEFAULT", "Default File Format", ""),
+            ("JPEG", "JPG", ""),
+            ("OPEN_EXR", "OpenEXR", ""),
+            ("TIFF", "Tiff", ""),
+            ("PNG", "PNG", "")
+        ])
+    
     digits: bpy.props.IntProperty(
         name="Digits",
         description="Specify digits in filename",
@@ -3260,7 +3348,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
     _rendered_frames, _skipped_frames = [], []
     _timer = _frames = _stop = _rendering = _dec = _log = None
-    _output_path = _folder = _filename = _extension = None
+    _output_path = _folder = _filename = _extension = _engine = _render_format = None
     _subframe_flag = False
     _output_nodes = {}
     
@@ -3274,7 +3362,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
     def cancel_render(self, scene, depsgraph):
         self._stop = True
-        self.reset_output_paths(scene)
+        self.reset_scene_properties(scene)
         self._rendered_frames.pop()
 
     def post_render(self, scene, depsgraph):
@@ -3332,13 +3420,19 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         tree = scene.node_tree
         return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
 
-    def reset_output_paths(self, scene):
+    def reset_scene_properties(self, scene):
         scene.render.filepath = self._output_path
         for k, v in self._output_nodes.items():
             k.base_path = v["Base Path"]
             if "File Slots" in v: # Reset Slots
                 for c, fs in enumerate(k.file_slots):
                     fs.path = v["File Slots"][c]
+        # Reset the engine
+        if self.render_engine != 'DEFAULT':
+            scene.render.engine = self._engine
+        # Reset file format
+        if self.render_format != 'DEFAULT':
+            scene.render.image_settings.file_format = self.render_format
 
     def frame_repath(self, scene, frame_number):
         ''' Set the frame, assamble main file and output node paths '''
@@ -3369,13 +3463,24 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                     of = replace_globals(v["Filename"])
                 """ Final output node path assembly """
                 k.base_path = os.path.join(replace_globals(v["Folder"]), of)
-
+    
+    def custom_render_attribs(self, scene):
+        rndr = scene.render
+        if self.render_engine != 'DEFAULT':
+            self._engine = rndr.engine
+            rndr.engine = self.render_engine
+        if self.render_format != 'DEFAULT':
+            self._render_format = rndr.image_settings.file_format
+            rndr.image_settings.file_format = self.render_format
+    
     def start_render(self, scene, frame, silent=False):
         rndr = scene.render # Skip frame, if rendered already
         if not rndr.use_overwrite and os.path.isfile(rndr.filepath):
             self._skipped_frames.append(frame)
             self.post_render(scene, None)
         else:
+            # Custom render attribs
+            self.custom_render_attribs(scene)
             if silent:
                 bpy.ops.render.render(write_still=True)
             else:
@@ -3484,7 +3589,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 self.start_render(scn, frame_number, silent=True)
 
             """ Reset output path & display results """
-            self.reset_output_paths(scn)
+            self.reset_scene_properties(scn)
             return {"FINISHED"}
 
         """ Add timer & handlers for modal """
@@ -3511,7 +3616,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 bpy.app.handlers.render_cancel.remove(self.cancel_render)
 
                 """ Reset output path & display results """
-                self.reset_output_paths(scn)
+                self.reset_scene_properties(scn)
                 self.final_report()
                 return {"FINISHED"}
 
