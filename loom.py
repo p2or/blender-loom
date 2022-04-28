@@ -3473,19 +3473,25 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
 
     def reset_scene_properties(self, scene):
-        ''' Reset engine, file format & resolution '''
+        
+        """ Reset output paths """
         scene.render.filepath = self._output_path
         for k, v in self._output_nodes.items():
             k.base_path = v["Base Path"]
             if "File Slots" in v: # Reset Slots
                 for c, fs in enumerate(k.file_slots):
                     fs.path = v["File Slots"][c]
-        if self.render_engine != 'DEFAULT':
+
+        """ Reset engine and format properties """
+        if self._engine is not None:
             scene.render.engine = self._engine
-        if self.render_format != 'DEFAULT':
+            self._engine = None
+        if self._render_format is not None:
             scene.render.image_settings.file_format = self._render_format
-        if self.render_resolution != 'DEFAULT':
+            self._render_format = None
+        if self._resolution is not None:
             scene.render.resolution_percentage = int(self._resolution)
+            self._resolution = None
 
     def frame_repath(self, scene, frame_number):
         ''' Set the frame, assamble main file and output node paths '''
@@ -3520,13 +3526,13 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
     def custom_render_attribs(self, scene):
         ''' Override scene properties '''
         rndr = scene.render
-        if self.render_engine != 'DEFAULT':
+        if self.render_engine != 'DEFAULT' and self._engine is None:
             self._engine = rndr.engine
             rndr.engine = self.render_engine
-        if self.render_format != 'DEFAULT':
+        if self.render_format != 'DEFAULT' and self._render_format is None:
             self._render_format = rndr.image_settings.file_format
             rndr.image_settings.file_format = self.render_format
-        if self.render_resolution != 'DEFAULT':
+        if self.render_resolution != 'DEFAULT' and self._resolution is None:
             self._resolution = rndr.resolution_percentage
             rndr.resolution_percentage = int(self.render_resolution)
     
