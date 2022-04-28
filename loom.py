@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 6),
+    "version": (0, 8, 7),
     "blender": (2, 82, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
@@ -3473,7 +3473,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
 
     def reset_scene_properties(self, scene):
-        
+
         """ Reset output paths """
         scene.render.filepath = self._output_path
         for k, v in self._output_nodes.items():
