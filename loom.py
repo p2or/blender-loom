@@ -1301,6 +1301,13 @@ def colorspace_callback(scene, context):
     return colorspace
 
 
+image_extensions_from_format = {
+    "JPEG": ".jpg",
+    "OPEN_EXR": ".exr",
+    "TIFF": ".tif",
+    "PNG": ".png",
+}
+
 class LOOM_MT_display_settings(bpy.types.Menu):
     bl_label = "Loom Batch Display Settings"
     bl_idname = "LOOM_MT_display_settings"
@@ -1534,29 +1541,37 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         for c, item in enumerate(lum.batch_render_coll):
             python_expr = ("import bpy;" +\
                     "bpy.ops.render.image_sequence(" +\
-                    "frames='{fns}', isolate_numbers={iel}, render_silent={cli}," +\
-                    "render_engine='{eng}', render_format='{ff}', render_resolution='{res}');" +\
-                    "bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)").format(
+                    "frames='{fns}', isolate_numbers={iel}, render_silent={cli}, ").format(
                         fns=item.frames,
                         iel=item.input_filter,
-                        eng=self.engine,
-                        ff=self.file_format,
-                        res=self.render_resolution,
                         cli=True)
 
+            python_expr += ("render_engine='{eng}', render_format='{ff}', " +\
+                "render_resolution='{res}');").format(
+                    eng=self.engine,
+                    ff=self.file_format,
+                    res=self.render_resolution)
+
+            python_expr += "bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)"
             cli_args = [bpy.app.binary_path, "-b", item.path, "--python-expr", python_expr]
             cli_arg_dict[c] = cli_args
 
         """ Encoding """
         coll_len = len(cli_arg_dict)
         for c, item in enumerate(lum.batch_render_coll):
-            if item.encode_flag and item.name not in black_list:
+            if item.encode_flag and item.name not in black_list:                    
                 python_expr = ("import bpy;" +\
-                            "seq_path=bpy.context.scene.render.frame_path(frame=1);" +\
-                            #"seq_path=bpy.context.scene.render.filepath;" +\
-                            "bpy.ops.loom.encode_dialog(" +\
-                            "sequence=seq_path, terminal_instance=False, pause=False)")
+                        "seq_path=bpy.context.scene.render.frame_path(frame=1);" +\
+                        #"seq_path=bpy.context.scene.render.filepath;" +\
+                        "bpy.ops.loom.encode_dialog(" +\
+                        "sequence=seq_path, terminal_instance=False, ")
+
+                if self.file_format != "DEFAULT" and self.override_render_settings:
+                    ff = image_extensions_from_format[self.file_format]
+                    python_expr += "sequence_extension='{ext}', ".format(ext=ff)
                 
+                python_expr += "pause=False)"
+               
                 cli_args = [bpy.app.binary_path, "-b", item.path, "--python-expr", python_expr]
                 cli_arg_dict[c+coll_len] = cli_args
 
@@ -2109,21 +2124,6 @@ class LOOM_OT_batch_remove_doubles(bpy.types.Operator):
             return {'FINISHED'}
 
 
-class LOOM_OT_batch_active_item(bpy.types.Operator):
-    """Print active Item"""
-    bl_idname = "loom.batch_active_item"
-    bl_label = "Print Active Item to Console"
-    bl_options = {'INTERNAL'}
-
-    def execute(self, context):
-        lum = context.scene.loom
-        try:
-            print (lum.batch_render_coll[lum.batch_render_idx].name)
-        except IndexError:
-            print ("No active item")
-        return{'FINISHED'}
-    
-
 class LOOM_OT_batch_default_range(bpy.types.Operator):
     """Revert to default frame range"""
     bl_idname = "loom.batch_default_frames"
@@ -2196,10 +2196,6 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         description="Frame Rate",
         default=25, min=1)
 
-    missing_frames_bool: bpy.props.BoolProperty(
-        name="Missing Frames",
-        description="Missing Frames")
-
     codec: bpy.props.EnumProperty(
         name="Codec",
         description="Codec",
@@ -2214,6 +2210,11 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         name="New Terminal Instance",
         description="Opens Blender in a new Terminal Window",
         default=True)
+
+    sequence_extension: bpy.props.StringProperty(
+        name="Extension",
+        description="File extension for override"
+    )
 
     pause: bpy.props.BoolProperty(
         name="Confirm when done",
@@ -2316,12 +2317,16 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         seq_path = lum.sequence_encode if not self.sequence else self.sequence
         mov_path = lum.movie_path if not self.movie else self.movie
 
+        # If a single file is passed instead of a sequence 
+        if self.sequence:
+            seq_path = re.sub(r"\d+\.", "####.", seq_path) # r"\d{4}\."
+
         path_error = False
         if not seq_path:
             self.report({'ERROR'}, "No image sequence specified")
             path_error = True
 
-        if path_error:
+        if path_error and self.properties.is_property_set("sequence"):
             bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
@@ -2329,6 +2334,9 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         basedir, filename = os.path.split(seq_path)
         basedir = os.path.realpath(bpy.path.abspath(basedir))
         filename_noext, extension = os.path.splitext(filename)
+
+        if self.sequence_extension:
+            extension = self.sequence_extension
 
         seq_error = False
         if '#' not in filename_noext:
@@ -2344,7 +2352,6 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
             seq_error = True
 
         if seq_error:
-            bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
         hashes = filename_noext.count('#')
@@ -2366,16 +2373,18 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
 
         """ Verify movie file name and extension """
         mov_basedir, mov_filename = os.path.split(mov_path)
+        mov_filename = re.sub(r"\d{4}\.", ".", mov_filename)
         mov_filename_noext, mov_extension = os.path.splitext(mov_filename)
         mov_extension = ".mov"
 
-        mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
-        if os.path.isfile(mov_path):
-            time_stamp = strftime("_%Y%m%d-%H%M%S")
+        """ Adding timestamp to movie file name """
+        time_stamp = strftime("%Y%m%d-%H%M%S") #if os.path.isfile(mov_path): 
+        if mov_filename_noext.endswith("_"):
             mov_filename_noext = "{}{}".format(mov_filename_noext, time_stamp)
-        
+        else:
+            mov_filename_noext = "{}_{}".format(mov_filename_noext, time_stamp)
         mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
-
+               
         """ Detect missing frames """
         frame_numbers = sorted(list(image_sequence.keys())) #start_frame, end_frame = fn[0], fn[-1]
         missing_frame_list = self.missing_frames(frame_numbers)
@@ -2400,14 +2409,8 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         fn_ffmpeg = filename_noext.replace("#"*hashes, "%0{}d{}".format(hashes, extension))
         fp_ffmpeg = os.path.join(basedir, fn_ffmpeg) # "{}%0{}d{}".format(filename_noext, 4, ext)
         cli_args = ["-start_number", frame_numbers[0], "-apply_trc", self.colorspace, "-i", fp_ffmpeg] 
-        cli_args += self.encode_presets[self.codec]
-        #cli_args += ["-f", "image2"]
+        cli_args += self.encode_presets[self.codec] #cli_args += ["-f", "image2"]
         cli_args += [mov_path] if self.fps == 25 else ["-r", self.fps, mov_path]
-
-        # TODO - PNG support
-        if extension in (".png", ".PNG"):
-            self.report({'WARNING'}, "PNG is not supported")
-            return {"FINISHED"}
 
         """ Run ffmpeg """
         bpy.ops.loom.run_terminal(
@@ -4963,7 +4966,6 @@ classes = (
     LOOM_OT_batch_clear_list,
     LOOM_OT_batch_dialog_reset,
     LOOM_OT_batch_remove_doubles,
-    LOOM_OT_batch_active_item,
     LOOM_OT_batch_default_range,
     LOOM_OT_batch_verify_input,
     LOOM_OT_encode_dialog,
