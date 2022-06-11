@@ -1554,8 +1554,6 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             rows=prefs.batch_dialog_rows)
         
         col = row.column(align=True)
-        #col.operator(LOOM_OT_batch_snapshot.bl_idname, icon="WORKSPACE", text="")
-        #col.separator()
         col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon='ADD', text="")
         col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
         col.menu(LOOM_MT_display_settings.bl_idname, icon='DOWNARROW_HLT', text="")
@@ -1569,13 +1567,12 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         col = row.column(align=True)
         col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon="DOCUMENTS")
         row = col.row(align=True)
-        row.operator(LOOM_OT_batch_snapshot.bl_idname, icon="IMAGE_BACKGROUND", text="Add Snapshot")
         row.operator(LOOM_OT_scan_blends.bl_idname, icon='ZOOM_SELECTED') #VIEWZOOM
-
+        if bpy.data.is_saved: # icon="WORKSPACE"
+            row.operator(LOOM_OT_batch_snapshot.bl_idname, icon="IMAGE_BACKGROUND", text="Add Snapshot")
+        
         layout.row() # Seperator
         row = layout.row(align=True)
-        #row = row.column(align=True)
-        #row.operator(LOOM_OT_scan_blends.bl_idname, icon='ZOOM_SELECTED') #VIEWZOOM
         sub_row = row.row(align=True)
         sub_row.operator(LOOM_OT_batch_remove_doubles.bl_idname, text="Remove Duplicates", icon="SEQ_SPLITVIEW")
         sub_row.operator(LOOM_OT_batch_clear_list.bl_idname, text="Clear List", icon="PANEL_CLOSE")
@@ -1671,6 +1668,10 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
                 if match: file_sequence[int(match.group(1))] = os.path.join(basedir, f.name)
         return file_sequence
 
+    @classmethod
+    def poll(cls, context):
+        return bpy.data.is_saved
+
     def execute(self, context):
         snap_dir = self.snapshot_folder
         if not self.properties.is_property_set("snapshot_folder"):
@@ -1714,15 +1715,24 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
             if self.apply_globals: bpy.ops.loom.globals_bake(action='APPLY')
             bpy.ops.wm.save_as_mainfile(filepath=fcopy, copy=True)
             if self.apply_globals: bpy.ops.loom.globals_bake(action='RESET')
-            self.report({'INFO'},"Snapshot created: {}".format(fcopy))
+            
+            if not os.path.isfile(fcopy):
+                self.report({'WARNING'},"Can not save a copy of the current file")
+                return {"CANCELLED"}
+            else:
+                self.report({'INFO'},"Snapshot created: {}".format(fcopy))
 
             ''' Add the snapshot to the list '''
             if self.options.is_invoke:
                 fd, fn = os.path.split(fcopy)
                 scn = context.scene
                 lum = scn.loom
-                try: # https://blender.stackexchange.com/a/55503/3710
-                    data = blend_render_info.read_blend_rend_chunk(fcopy)
+
+                data = blend_render_info.read_blend_rend_chunk(fcopy)
+                if not data:
+                    self.report({'WARNING'}, "Skipped {}, invalid .blend file".format(fcopy))
+                    return {'CANCELLED'}
+                else:
                     start, end, sc = data[0]
                     item = lum.batch_render_coll.add()
                     item.rid = len(lum.batch_render_coll)
@@ -1733,14 +1743,8 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
                     item.scene = sc
                     item.frames = "{}-{}".format(item.frame_start, item.frame_end)
                     lum.batch_render_idx = len(lum.batch_render_coll)-1
-                except:
-                    self.report({'WARNING'},"Unable adding the file to the list")
 
-        if not os.path.isfile(fcopy):
-            self.report({'WARNING'},"Can not save a copy of the current file")
-            return {"CANCELLED"}
-        else:
-            return {'FINISHED'}
+        return {'FINISHED'}
 
     def invoke(self, context, event):
         if user_globals(context):
@@ -1748,8 +1752,7 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
         if bpy.data.filepath:
             self.file_name = bpy.path.basename(bpy.data.filepath)[:-6]
         return context.window_manager.invoke_props_dialog(self, width=450)
-        #else:
-            #return self.execute(context)
+        #else: return self.execute(context)
 
     def draw(self, context):
         layout = self.layout
@@ -1803,14 +1806,23 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         scn = context.scene
         lum = scn.loom
-        folder = os.path.dirname(self.filepath)
         
-        added = []
+        valid_files, invalid_files = [], []
+        start, end, sc = [1, 250, "Scene"]
         for i in self.files:
-            try: # https://blender.stackexchange.com/a/55503/3710
-                path_to_file = os.path.join(folder, i.name)
+            path_to_file = os.path.join(os.path.dirname(self.filepath), i.name)
+            if os.path.isfile(path_to_file):
+                
+                # /Blender <version>/<version>/scripts/modules/blender_render_info.py
+                # https://blender.stackexchange.com/a/55503/3710
                 data = blend_render_info.read_blend_rend_chunk(path_to_file)
-                start, end, sc = data[0]
+                if not data:
+                    invalid_files.append(i.name)
+                    self.report({'INFO'}, "Can not read frame range from {}, invalid .blend".format(i.name))
+                else:
+                    valid_files.append(i.name)
+                    start, end, sc = data[0]
+
                 item = lum.batch_render_coll.add()
                 item.rid = len(lum.batch_render_coll)
                 item.name = i.name
@@ -1819,14 +1831,15 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
                 item.frame_end = end
                 item.scene = sc
                 item.frames = "{}-{}".format(item.frame_start, item.frame_end)
-                if i.name: added.append(i.name)
-            except:
-                self.report({'INFO'}, "Can't read {}".format(i.name))
-        if added:
-            self.report({'INFO'}, "Added {} to the list".format(", ".join(added)))
+        
+        #self.report({'INFO'}, "Skipped {}, no valid .blend".format(", ".join(valid_files)))
+        if invalid_files:
+            self.report({'WARNING'}, "Can not read frame range from {}, invalid .blend file(s)".format(", ".join(invalid_files)))
+        elif valid_files:
+            self.report({'INFO'}, "Added {} to the list".format(", ".join(valid_files)))
         else:
             self.report({'INFO'}, "Nothing selected")
-            
+ 
         lum.batch_render_idx = len(lum.batch_render_coll)-1
         self.display_popup(context)
         return {'FINISHED'}
@@ -1881,16 +1894,20 @@ class LOOM_OT_scan_blends(bpy.types.Operator, ImportHelper):
             return {'CANCELLED'}
 
         blend_files = self.blend_files(self.directory, self.sub_folders)
-        if not blend_files:
+        if next(blend_files, None) is None:
             self.display_popup(context)
             self.report({'WARNING'},"No blend files found in {}".format(self.directory))
             return {'CANCELLED'}
         
-        added = []
+        valid_files, invalid_files = [], []
         for i in blend_files:
-            try:
-                path_to_file = (i.path)
-                data = blend_render_info.read_blend_rend_chunk(path_to_file)
+            path_to_file = (i.path)
+            data = blend_render_info.read_blend_rend_chunk(path_to_file)
+            if not data:
+                invalid_files.append(i.name)
+            else:
+                valid_files.append(i.name)
+                start, end, sc = data[0]
                 start, end, sc = data[0]
                 item = lum.batch_render_coll.add()
                 item.rid = len(lum.batch_render_coll)
@@ -1900,17 +1917,16 @@ class LOOM_OT_scan_blends(bpy.types.Operator, ImportHelper):
                 item.frame_end = end
                 item.scene = sc
                 item.frames = "{}-{}".format(item.frame_start, item.frame_end)
-                if i.name:
-                    added.append(i.name)
-            except:
-                  self.report({'INFO'}, "Can't read {}".format(i.name))
-        if added:
-            self.report({'INFO'}, "Added {} to the list".format(", ".join(added)))
-        
+
+        if valid_files:
+             self.report({'INFO'}, "Added {} to the list".format(", ".join(valid_files)))
+        if invalid_files:
+            self.report({'WARNING'}, "Skipped {}, invalid .blend file(s)".format(", ".join(invalid_files)))
+
         lum.batch_render_idx = len(lum.batch_render_coll)-1
         self.display_popup(context)
         return {'FINISHED'}
-    
+
     def cancel(self, context):
         self.display_popup(context)
 
