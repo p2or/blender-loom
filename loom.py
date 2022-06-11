@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 6),
+    "version": (0, 8, 7),
     "blender": (2, 82, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
@@ -1779,6 +1779,7 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
     """Select Blend Files via File Browser"""
     bl_idname = "loom.batch_select_blends"
     bl_label = "Select Blend Files"
+    bl_options = {'INTERNAL'}
 
     filename_ext = ".blend"
     filter_glob: bpy.props.StringProperty(
@@ -4287,6 +4288,7 @@ class LOOM_OT_select_project_directory(bpy.types.Operator, ExportHelper):
     """Select Project Directory using the File Browser"""
     bl_idname = "loom.select_project_directory"
     bl_label = "Project Directory"
+    bl_options = {'INTERNAL'}
 
     filename_ext = ""
     use_filter_folder = True
