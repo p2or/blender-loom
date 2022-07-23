@@ -46,26 +46,14 @@ You can also render **every nth frame** of the scene by adding `x` followed by a
     
     *Tip:* If [Developer Extras](https://docs.blender.org/manual/en/latest/editors/preferences/interface.html) is enabled in the preferences, you can also press <kbd>F3</kbd> and type *Render selected keyframes...* 
 
-
-## Encode Image Sequence Dialog <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F9</kbd>
-
-If [FFmpeg](https://www.ffmpeg.org/) is installed on your machine and set up properly in the *Addon Preferences*, this dialog allows to encode image sequences to [ProRes](https://en.wikipedia.org/wiki/Apple_ProRes) or [DNxHD](https://en.wikipedia.org/wiki/Avid_DNxHD)/[DNxHR](https://en.wikipedia.org/wiki/DNxHR_codec) for preview or layout purposes. You can select any image sequence, set the output colorspace (useful for encoding linear exr sequences), the frame rate and the desired codec.
-
-![Encode Image Sequence Dialog](https://i.stack.imgur.com/ILENa.jpg)
-
-### Options
- - Select `ProRes 4444 XQ` to get an **alpha channel**
- - You can **verify the image sequence** on disk before encoding by clicking the *Verify Image Sequence* operator ![I1](https://i.stack.imgur.com/JovW0.jpg), which also detects all frames missing frames of the sequence
- - In case there are **missing frames**, the addon either provides an utility function to fill the gaps of the image sequence with copies of the nearest frame to get the full lenght animation and another operator to render all missing frames:
- 
-   ![Encode Image Sequence Dialog](https://i.stack.imgur.com/ul9ld.jpg)
- 
-
 ## Loom Batch Dialog <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Alt</kbd><kbd>F12</kbd>
 
 The batch dialog allows to *render multiple .blend files* and *encoding their output sequences* by using the command line in one go. You can either scan any directory or add the .blend files manually, re-order them and specify the render range or single frames for each file similar to the *Render Image Sequence Dialog*.
 
-![Loom Batch Dialog](https://i.stack.imgur.com/OSbdI.jpg)
+<!-- ![Loom Batch Dialog](https://i.stack.imgur.com/OSbdI.jpg) -->
+
+<img width="783" alt="loom-batch" src="https://user-images.githubusercontent.com/512368/180617979-fad236e2-0a0f-4892-acad-3d0524b20284.png">
+
 
 ### Notes
 
@@ -73,7 +61,63 @@ The batch dialog allows to *render multiple .blend files* and *encoding their ou
  - Execution of that operator generates a **batch file** in blender's scripts directory (`.sh` or `.bat` depending on the operating system) and runs all commands via command line one by another - you can make the generated batch files your own and modify them (for easy access, click the *disk icon* right beside *Delete temporary batch file* operator in the *Addon Preferences*, to open up blender's scripts directory on your system)
   - In case you need **more space** within the dialog itself or e.g. you'd like to see the **path of each file**, you can change the appearance of the elements within the dialog by clicking the arrow to change the display settings directly:
 
-    ![Loom Batch Display Menu](https://i.stack.imgur.com/MgHPk.jpg)
+    <!-- ![Loom Batch Display Menu](https://i.stack.imgur.com/MgHPk.jpg) -->
+    
+
+## Encode Image Sequence Dialog <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F9</kbd>
+
+If [FFmpeg](https://www.ffmpeg.org/) is installed on your machine and set up properly in the *Addon Preferences*, this dialog allows to encode image sequences to [ProRes](https://en.wikipedia.org/wiki/Apple_ProRes) or [DNxHD](https://en.wikipedia.org/wiki/Avid_DNxHD)/[DNxHR](https://en.wikipedia.org/wiki/DNxHR_codec) for preview or layout purposes. You can select any image sequence, set the output colorspace (useful for encoding linear exr sequences), the frame rate and the desired codec.
+
+<!-- ![Encode Image Sequence Dialog](https://i.stack.imgur.com/ILENa.jpg) -->
+
+<img width="680" alt="Encode-Image-Sequence" src="https://user-images.githubusercontent.com/512368/180618261-979aac90-a906-448c-9e9c-09028db4b50f.png">
+
+
+### Options
+ - Select `ProRes 4444 XQ` to get an **alpha channel**
+ - You can **verify the image sequence** on disk before encoding by clicking the *Verify Image Sequence* operator ![I1](https://i.stack.imgur.com/JovW0.jpg), which also detects all frames missing frames of the sequence
+ - In case there are **missing frames**, the addon either provides an utility function to fill the gaps of the image sequence with copies of the nearest frame to get the full lenght animation and another operator to render all missing frames (make sure *Verfify Sequence* is enabled when selecting a frame in the file browser <kbd>N</kbd>).
+ 
+   <!-- ![Encode Image Sequence Dialog](https://i.stack.imgur.com/ul9ld.jpg) -->
+
+
+## Utilities
+
+Loom also includes some handy utilities that help in production e.g. display of the final *Output Path*, a list of all *File Output* nodes in the regular *Output Panel*, the creation of project folders and more.
+
+### Render Version
+
+Once you add `v` and some arbitrary number to the *Output Path*, a new 'slider' appears in the *Output Area* which allows to change the actual version string on the fly.
+
+![render-version](https://user-images.githubusercontent.com/512368/180618398-cb566e95-53cd-4f37-ad1d-6aeed1b184d6.gif)
+
+If you'd like to remove all version strings in your *File Output* nodes, hit <kbd>F3</kbd> and type `Remove version str...` 
+
+### Globals
+
+Loom allows to replace of all occurrences of any global variable in the *Output Path* as well as in the *File Output* nodes that are defined in the *Add-on Preferences* via custom python expressions.
+
+![globals_gif](https://user-images.githubusercontent.com/512368/180618964-b4d6ef0c-c542-4925-be40-3e6b65cb9172.gif)
+
+<!-- <img width="736" alt="Globals" src="https://user-images.githubusercontent.com/512368/180612932-93a1882c-06f3-4016-a2f7-13fa61c78dce.png"> -->
+
+### Rename File Sequence <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F2</kbd>
+
+Using this dialog allows to rename any arbitrary image or file sequence on disk.
+
+<img width="674" alt="Rename-File-Sequence" src="https://user-images.githubusercontent.com/512368/180613687-fc71ca7b-a415-45b1-bc27-db4332d76603.png">
+
+### Markers
+
+Loom adds three new operators to the *Marker* menu of the *Timeline (Timeline > Markers)*. You can **generate markers based on the selected cameras** in the viewport, **unbind the markers** from the cameras or just **batch rename** them using a custom name or *Globals* that are defined in the *Add-on Preferences*.
+
+<img width="880" alt="Batch-rename-markers-II" src="https://user-images.githubusercontent.com/512368/180614748-98ba2f5f-cb67-4c88-9714-5b63f1d09684.png">
+
+### Project Setup <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F1</kbd>
+
+Using this dialog allows to create all relevant main folders for the current project.
+
+<img width="667" alt="Project-Setup" src="https://user-images.githubusercontent.com/512368/180613021-0046c4b8-4ef6-4a10-bcef-f4a87660421e.png">
 
 
 ## Addon Preferences
@@ -83,7 +127,6 @@ The available settings are slightly different per operating system. However, you
 
 | Property                          | Description                                            | 
 |:----------------------------------|:-------------------------------------------------------|
-| *Display Buttons in Render Panel* | Displays all *loom operators* in the *Render Panel* (except the *Batch Dialog*) |                    
 | *Playblast (Experimental)*        | Allows to playback the latest rendered image sequence by using <kbd>Shift</kbd><kbd>Ctrl</kbd><kbd>F11</kbd> hotkey (requires restarting blender after saving the *User Preferences*) |
 | *Default Animation Player*        | Force using the default *Animation Player (User Preferences > Files > Animation Player)* for *Playblast* operator |
 | *Path to FFmpeg Binary*           | Only required if not already part of your linux distribution or not added to the environment variables | 
@@ -92,6 +135,7 @@ The available settings are slightly different per operating system. However, you
 | *Xterm (Terminal Fallback)*       | Fallback for all command line operations if the system terminal is not supported, [Xterm](https://en.wikipedia.org/wiki/Xterm) is available for most *Linux Distributions* and *older Versions of MacOS*| 
 | *Reset Preferences*       | Reset all properties to their default values (except the binary path to ffmpeg) | 
 
+
 ## Gotchas and Limitations
 
  - Loom does not support direct encoding, make sure the *File Format* is set to *Image*
@@ -99,7 +143,8 @@ The available settings are slightly different per operating system. However, you
  - In case encoding fails for some reason, make sure the path to ffmpeg binary is [absolute](https://en.wikipedia.org/wiki/Path_(computing))
  - Renewal of hotkeys *once entirely removed*, requires resetting the *Addon-Preferences* and restarting blender 
  - Switching the terminal back from *Xterm* to the default system terminal requires resetting the *Addon-Preferences* in some cases
- 
+
+
 ## Installation
 
  1. Download the [latest release](https://github.com/p2or/blender-loom/releases/)
