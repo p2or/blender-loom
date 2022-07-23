@@ -265,7 +265,7 @@ def user_globals(context):
             else:
                 for slot in node.file_slots:
                      if any(ext in slot.path for ext in vars.keys()):
-                         return True   
+                         return True
     return False
 
 
@@ -3107,9 +3107,10 @@ class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        space = context.space_data
-        return space.type == 'NODE_EDITOR'
-
+        # space = context.space_data return space.type == 'NODE_EDITOR'
+        # all([hasattr(scene.node_tree, "nodes"), scene.render.use_compositing, scene.use_nodes])
+        return hasattr(context.scene.node_tree, "nodes")
+        
     def remove_version(self, fpath):
         match = re.search(r'(v\d+)', fpath)
         delimiters = ("-", "_", ".")
@@ -4605,7 +4606,6 @@ def draw_loom_marker_menu(self, context):
 def draw_loom_version_number(self, context):
     """Append Version Number Slider to the Output Area"""
     if re.search("v\d+", context.scene.render.filepath) is not None:
-        
         glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
         output_folder, file_name = os.path.split(bpy.path.abspath(context.scene.render.filepath))
         if any(ext in output_folder for ext in glob_vars.keys()):
@@ -4617,6 +4617,7 @@ def draw_loom_version_number(self, context):
         row = layout.row(align=True)
         row.prop(context.scene.loom, "output_render_version") #NODE_COMPOSITING
         row.prop(context.scene.loom, "output_sync_comp", text="", toggle=True, icon="IMAGE_RGB_ALPHA")
+
         '''
         row = row.row(align=True)
         row.enabled = os.path.isdir(output_folder)
@@ -4679,7 +4680,7 @@ def draw_loom_outputpath(self, context):
 def draw_loom_compositor_paths(self, context):
     """Display File Output paths to the Output Area"""
     scene = context.scene
-    if hasattr(scene.node_tree, "nodes") and scene.render.use_compositing:
+    if all([hasattr(scene.node_tree, "nodes"), scene.render.use_compositing, scene.use_nodes]):
         output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
         if len(output_nodes) > 0:
             lum = scene.loom
@@ -4707,9 +4708,11 @@ def draw_loom_compositor_paths(self, context):
                     col = box.column()
                     col.template_image_settings(o.format, color_management=False)
                     col.separator()
-            
-            layout.row()
 
+            box.row()
+            #box.row().operator(LOOM_OT_utils_node_cleanup.bl_idname)
+            layout.row()
+            
 
 def draw_loom_project(self, context):
     """Append project dialog to app settings"""
