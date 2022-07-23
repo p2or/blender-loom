@@ -237,8 +237,11 @@ def replace_globals(s, debug=False):
     for key, val in vars.items():
         if not debug:
             if key.startswith("$") and not key.isspace():
-                if val.expr and not val.expr.isspace() and isevaluable(val.expr):
-                    s = s.replace(key, str(eval(val.expr)))
+                if val.expr and not val.expr.isspace():
+                    if isevaluable(val.expr):
+                        s = s.replace(key, str(eval(val.expr)))
+                    else:
+                        s = s.replace(key, "NO-{}".format(key.replace("$", "")))
         else: 
             print (key, val, val.expr)
     return s
