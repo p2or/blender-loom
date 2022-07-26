@@ -669,7 +669,7 @@ class LOOM_OT_globals_ui(bpy.types.Operator):
     """Move global variables up and down, add and remove"""
     bl_idname = "loom.globals_action"
     bl_label = "Global Actions"
-    bl_options = {'REGISTER'}
+    bl_options = {'REGISTER', 'INTERNAL'}
 
     action: bpy.props.EnumProperty(
         items=(
@@ -704,7 +704,7 @@ class LOOM_OT_directories_ui(bpy.types.Operator):
     """Move items up and down, add and remove"""
     bl_idname = "loom.directory_action"
     bl_label = "Directory Actions"
-    bl_options = {'REGISTER'}
+    bl_options = {'REGISTER', 'INTERNAL'}
 
     action: bpy.props.EnumProperty(
         items=(
@@ -3554,7 +3554,7 @@ class LOOM_OT_playblast(bpy.types.Operator):
     """Playback rendered image sequence using the default or blender player"""
     bl_idname = "loom.playblast"
     bl_label = "Playblast Sequence"
-    bl_options = {'REGISTER'}
+    bl_options = {'REGISTER', 'INTERNAL'}
     
     # Todo! Just a temporary solution.
     # Might be a better idea trying to implement properties
@@ -4409,7 +4409,7 @@ class LOOM_OT_bake_globals(bpy.types.Operator):
     """Apply Globals or Restore Filepaths"""
     bl_idname = "loom.globals_bake"
     bl_label = "Bake Globals"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
     
     action: bpy.props.EnumProperty(
         name="Action",
