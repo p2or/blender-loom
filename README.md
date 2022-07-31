@@ -158,8 +158,9 @@ The available settings are slightly different per operating system. However, you
 ## Installation
 
  1. Download the [latest release](https://github.com/p2or/blender-loom/releases/)
- 2. In Blender open up *User Preferences > Addons*
- 3. Click *Install from File*, select `loom.py` and activate the Addon
+ 1. In Blender open up *User Preferences > Addons*
+ 1. Click *Install from File*, select `loom.py` and activate the Addon
+ 1. Save the *Preferences* and restart blender
 
 ----
 
