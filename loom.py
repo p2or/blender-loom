@@ -894,7 +894,7 @@ class LOOM_OT_render_threads(bpy.types.Operator):
 class LOOM_OT_render_full_scale(bpy.types.Operator):
     """Set Resolution Percentage Scale to 100%"""
     bl_idname = "loom.full_scale"
-    bl_label = "Full Scale"
+    bl_label = "Full Scale Image"
     bl_options = {'INTERNAL'}
 
     def execute(self, context): #context.area.tag_redraw()
@@ -902,19 +902,104 @@ class LOOM_OT_render_full_scale(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class LOOM_OT_timeline_props(bpy.types.Operator):
-    """Set timeline range, steps & threads from UI"""
-    bl_idname = "loom.timeline_properties"
-    bl_label = "Timeline UI Properties"
+class LOOM_OT_guess_frames(bpy.types.Operator):
+    """Either set the Range of the Timeline or find all missing Frames"""
+    bl_idname = "loom.guess_frames"
+    bl_label = "Set Timeline Range or detect missing Frames"
     bl_options = {'INTERNAL'}
 
+    detect_missing_frames: bpy.props.BoolProperty(
+            name="Missing Frames",
+            description="Detect all missing Frames based based on the Output Path",
+            default=True,
+            options={'SKIP_SAVE'})
+
+    def missing_frames(self, timeline_frames, rendered_frames):
+        return sorted(set(timeline_frames).difference(rendered_frames))
+
+    def rangify_frames(self, frames):
+        """ Convert list of integers to Range string [1,2,3] -> '1-3' """
+        G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
+        return ",".join("-".join(map(str,(g[0],g[-1])[:len(g)])) for g in G)
+
     def execute(self, context):
+        glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
         scn = context.scene
         lum = scn.loom
+
         timeline_range = "{start}-{end}".format(start=scn.frame_start, end=scn.frame_end)
         timeline_inc = "{range}x{inc}".format(range=timeline_range, inc=scn.frame_step)
         lum.frame_input = timeline_inc if scn.frame_step != 1 else timeline_range
+        
+        """ Detect missing frames """
+        if self.detect_missing_frames:
+            image_sequence = {}
+            given_filename = True
+
+            fp = bpy.path.abspath(scn.render.filepath)
+            output_folder, file_name = os.path.split(fp)
+            output_folder = os.path.realpath(output_folder)
+
+            if any(ext in file_name for ext in glob_vars.keys()):
+                    file_name = replace_globals(file_name)
+            if any(ext in output_folder for ext in glob_vars.keys()):
+                output_folder = replace_globals(output_folder)
+
+            if not file_name:
+                given_filename = False
+                blend_name, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
+                file_name = blend_name + "_"
+
+            hashes = file_name.count('#')
+            if not hashes:
+                file_name = "{}{}".format(file_name, "#"*4)
+
+            if file_name.endswith(tuple(scn.render.file_extension)):
+                file_path = os.path.join(output_folder, file_name)
+            else:
+                file_path = os.path.join(output_folder, "{}{}".format(file_name, scn.render.file_extension))
+
+            basedir, filename = os.path.split(file_path)
+            basedir = os.path.realpath(bpy.path.abspath(basedir))
+            filename_noext, extension = os.path.splitext(filename)
+            hashes = filename_noext.count('#')
+            name_real = filename_noext.replace("#", "")
+            file_pattern = r"{fn}(\d{{{ds}}})\.?{ex}$".format(fn=name_real, ds=hashes, ex=extension)
+            seq_name = "{}{}{}".format(name_real, hashes*"#", extension)
+
+            for f in os.scandir(basedir):
+                if f.name.endswith(extension) and f.is_file():
+                    match = re.match(file_pattern, f.name, re.IGNORECASE)
+                    if match: image_sequence[int(match.group(1))] = os.path.join(basedir, f.name)
+
+            if not len(image_sequence) > 1:
+                if not given_filename:
+                    return {"CANCELLED"}
+                else:
+                    # -> String needs to be split up, multiline "\" is not supported for INFO reports 
+                    err_seq_name = 'No matching sequence with the name "{}" found in'.format(seq_name)
+                    err_dir_name = 'directory "{}", set to default timeline range'.format(basedir)
+                    self.report({'INFO'},"{} {}".format(err_seq_name, err_dir_name))
+                return {"CANCELLED"}
+
+            missing_frames = self.missing_frames(
+                        [*range(scn.frame_start, scn.frame_end+1)],
+                        sorted(list(image_sequence.keys())))
+
+            if missing_frames:
+                frames_to_render = self.rangify_frames(missing_frames)
+                frame_count = len(missing_frames)
+                lum.frame_input = frames_to_render
+                self.report({'INFO'}, "{} missing Frame{} to render based on the output path: {} [{}]".format(
+                    frame_count, 's'[:frame_count^1], seq_name, frames_to_render))
+            else:
+                self.report({'INFO'}, 'All given Frames are rendered, see "{}" folder'.format(basedir))
         return {'FINISHED'}
+
+    def invoke(self, context, event):
+        if event.ctrl or event.oskey:
+            self.detect_missing_frames = False
+        return self.execute(context)
 
 
 class LOOM_OT_verify_frames(bpy.types.Operator):
@@ -924,16 +1009,30 @@ class LOOM_OT_verify_frames(bpy.types.Operator):
     bl_options = {'INTERNAL'}
 
     frame_input = None
+
+    individual_frames: bpy.props.BoolProperty(
+            name="Individual Frames",
+            description="List all Frames individually",
+            default=False,
+            options={'SKIP_SAVE'})
+
+    def rangify_frames(self, frames):
+        """ Convert list of integers to Range string [1,2,3] -> '1-3' """
+        G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
+        return ",".join("-".join(map(str,(g[0],g[-1])[:len(g)])) for g in G)
+
     def execute(self, context):
         scn = context.scene
-        folder = os.path.realpath(bpy.path.abspath(scn.render.filepath))
-        
         if self.frame_input:
-            self.report({'INFO'}, ("{} {} [{}] will be rendered to {}".format(
-                len(self.frame_input),
-                "Frame" if len(self.frame_input) == 1 else "Frames",
-                ', '.join('{}'.format(i) for i in self.frame_input), 
-                folder)))
+            frame_count = len(self.frame_input)
+            msg =  "{} Frame{} will be rendered".format(
+                frame_count, 's'[:frame_count^1])
+            if frame_count > 1:
+                if not self.individual_frames:
+                    msg += ": [{}]".format(self.rangify_frames(self.frame_input))
+                else:
+                    msg += ": [{}]".format(', '.join('{}'.format(i) for i in self.frame_input))
+            self.report({'INFO'}, msg)
         else:
             self.report({'INFO'}, "No frames specified")
         return {'FINISHED'}
@@ -942,6 +1041,8 @@ class LOOM_OT_verify_frames(bpy.types.Operator):
         lum = context.scene.loom
         self.frame_input = filter_frames(
             lum.frame_input, context.scene.frame_step, lum.filter_input)
+        if event.ctrl or event.oskey:
+            self.individual_frames = True
         return self.execute(context)
 
 
@@ -1025,7 +1126,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         prefs = context.preferences.addons[__name__].preferences
         
         if not lum.is_property_set("frame_input") or not lum.frame_input:
-            bpy.ops.loom.timeline_properties()
+            bpy.ops.loom.guess_frames(detect_missing_frames=False)
 
         if not prefs.is_property_set("terminal") or not prefs.terminal:
             bpy.ops.loom.verify_terminal()
@@ -1047,7 +1148,8 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         col.label(text="Frames:")
         col = split.column(align=True)
         sub = col.row(align=True) #GHOST_ENABLED
-        sub.operator(LOOM_OT_timeline_props.bl_idname, icon='PREVIEW_RANGE', text="")
+        # guess_icon = 'AUTO' if len(lum.render_collection) else 'PREVIEW_RANGE'
+        sub.operator(LOOM_OT_guess_frames.bl_idname, icon='PREVIEW_RANGE', text="")
         sub.prop(lum, "frame_input", text="")
         sub.prop(lum, "filter_input", icon='FILTER', icon_only=True)
         #sub.prop(lum, "filter_keyframes", icon='SPACE2', icon_only=True)
@@ -3343,7 +3445,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 hashes = re.findall("#+$", name_real)
                 name_real = re.sub("#", '', name_real)
                 self.digits = len(hashes[0])
-            return name_real + "_" if name_real[-1].isdigit() else name_real
+            return name_real + "_" if name_real and name_real[-1].isdigit() else name_real
 
         else: # If filename not specified, use blend-file name instead
             blend_name, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
@@ -4628,9 +4730,10 @@ def draw_loom_version_number(self, context):
 
 def draw_loom_outputpath(self, context):
     """Append compiled file path using globals to the Output Area"""
-    if not context.scene.render.filepath:
-        return
     scn = context.scene
+    if not scn.render.filepath:
+        return
+
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
     fp = bpy.path.abspath(scn.render.filepath)
     output_folder, file_name = os.path.split(fp)
@@ -4645,11 +4748,14 @@ def draw_loom_outputpath(self, context):
         globals_flag = True
     
     if not file_name and bpy.data.is_saved:
-        file_name = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
+        blend_name, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
+        file_name = blend_name + "_"
 
     hashes = file_name.count('#')
     if not hashes and not scn.loom.is_rendering:
-        file_name = "{}{}".format(file_name, "#"*4)
+        # A tiny detail when rendering, might be expensive
+        if not next(reversed(([x for x in re.findall(r'\d+\b', file_name)])), None):
+            file_name = "{}{}".format(file_name, "#"*4)
 
     if file_name.endswith(tuple(scn.render.file_extension)):
         file_path = os.path.join(output_folder, file_name)
@@ -4666,7 +4772,7 @@ def draw_loom_outputpath(self, context):
     else:
         row.operator(LOOM_OT_open_output_folder.bl_idname, icon='DISK_DRIVE', text="", emboss=False)
 
-    row.label(text="{}".format(file_path))
+    row.label(text="{}".format(file_path if not scn.loom.is_rendering else scn.render.filepath))
 
     if globals_flag or context.scene.loom.path_collection:
         sub_row = row.row(align=True)
@@ -4803,7 +4909,7 @@ classes = (
     LOOM_PG_scene_settings,
     LOOM_OT_render_threads,
     LOOM_OT_render_full_scale,
-    LOOM_OT_timeline_props,
+    LOOM_OT_guess_frames,
     LOOM_OT_verify_frames,
     LOOM_OT_render_dialog,
     LOOM_OT_render_input_dialog,
