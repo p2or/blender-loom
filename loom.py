@@ -358,6 +358,16 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         subtype='PIXEL',
         default=650, min=400)
 
+    timeline_extensions: bpy.props.BoolProperty(
+        name="Timeline Extensions",
+        description="Do not display Loom operators in the Timeline",
+        default=False)
+
+    output_extensions: bpy.props.BoolProperty(
+        name="Output Panel Extensions",
+        description="Do not display all File Output nodes and the final Output Path in the Output Panel",
+        default=False)
+
     log_render: bpy.props.BoolProperty(
         name="Logging (Required for Playback)",
         description="If enabled render output properties will be saved",
@@ -480,16 +490,21 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             col = split.column()
             col.prop(self, "render_dialog_width")
             col.prop(self, "batch_dialog_width")
-            col.separator()
-            col.prop(self, "playblast_flag", toggle=True, icon=self.draw_state(self.playblast_flag))
-            col = col.column()
             col = split.column()
             col.prop(self, "project_dialog_width")
             col.prop(self, "encode_dialog_width")
-            col.separator()
+
+            split = box_general.split(factor=split_width)
+            col = split.column()
+            col.prop(self, "timeline_extensions", toggle=True, icon=self.draw_state(not self.timeline_extensions))
+            col.prop(self, "output_extensions", toggle=True, icon=self.draw_state(not self.output_extensions))
+            col = split.column()
+            col.prop(self, "playblast_flag", toggle=True, icon=self.draw_state(self.playblast_flag))
             upl = col.column()
             upl.prop(self, "user_player", toggle=True, icon=self.draw_state(self.user_player))
             upl.enabled = self.playblast_flag
+
+            #col.separator()
             box_general.row()
 
         """ Globals """
@@ -4620,7 +4635,7 @@ class LOOM_OT_bake_globals(bpy.types.Operator):
 
 class LOOM_OT_utils_framerange(bpy.types.Operator):
     bl_idname = "loom.shot_range"
-    bl_label = "Set Shot Range"
+    bl_label = "Shot Range"
     bl_description = "Set Frame Range to 1001-1241"
     bl_options = {'REGISTER', 'UNDO'}
     
@@ -4730,10 +4745,11 @@ def draw_loom_version_number(self, context):
 
 def draw_loom_outputpath(self, context):
     """Append compiled file path using globals to the Output Area"""
+    if bpy.context.preferences.addons[__name__].preferences.output_extensions:
+        return
     scn = context.scene
     if not scn.render.filepath:
         return
-
     glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
     fp = bpy.path.abspath(scn.render.filepath)
     output_folder, file_name = os.path.split(fp)
@@ -4785,6 +4801,8 @@ def draw_loom_outputpath(self, context):
 
 def draw_loom_compositor_paths(self, context):
     """Display File Output paths to the Output Area"""
+    if bpy.context.preferences.addons[__name__].preferences.output_extensions:
+        return
     scene = context.scene
     if all([hasattr(scene.node_tree, "nodes"), scene.render.use_compositing, scene.use_nodes]):
         output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
@@ -4856,13 +4874,13 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         col = layout.column()
 
 def draw_loom_dopesheet(self, context):
-    layout = self.layout
-    if context.space_data.mode == 'TIMELINE':
+    if not bpy.context.preferences.addons[__name__].preferences.timeline_extensions:
+        layout = self.layout
         row = layout.row()
-        row.operator(LOOM_OT_utils_framerange.bl_idname, text="", icon='TRACKING_FORWARDS_SINGLE')
-    row = layout.row()
-    row.separator()
-    row.popover(panel="LOOM_PT_dopesheet", text="", icon='SEQUENCE')
+        if context.space_data.mode == 'TIMELINE':
+            row.operator(LOOM_OT_utils_framerange.bl_idname, text="", icon='TRACKING_FORWARDS_SINGLE')
+        row.separator()
+        row.popover(panel="LOOM_PT_dopesheet", text="", icon='SEQUENCE')
 
 
 # -------------------------------------------------------------------
