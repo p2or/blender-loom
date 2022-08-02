@@ -165,6 +165,8 @@ The available settings are slightly different per operating system. However, you
 
 | Property                          | Description                                            | 
 |:----------------------------------|:-------------------------------------------------------|
+| *Timeline Extensions*             | Allows to either turn on or off the display of the 'Loom Popover' and 'Shot Range' dialog in the *Timeline* |
+| *Output Panel Extensions*         | Allows to either turn on or off the display of all *File Output* nodes and the final *Output Path* *(Properties > Output Properties > Output)*  |
 | *Playblast (Experimental)*        | Allows to playback the latest rendered image sequence by using <kbd>Shift</kbd><kbd>Ctrl</kbd><kbd>F11</kbd> hotkey (requires restarting blender after saving the *User Preferences*) |
 | *Default Animation Player*        | Force using the default *Animation Player (User Preferences > Files > Animation Player)* for *Playblast* operator |
 | *Path to FFmpeg Binary*           | Only required if not already part of your linux distribution or not added to the environment variables | 
