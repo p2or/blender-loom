@@ -504,7 +504,7 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             upl.prop(self, "user_player", toggle=True, icon=self.draw_state(self.user_player))
             upl.enabled = self.playblast_flag
 
-            #col.separator()
+            box_general.row().prop(self, "ffmpeg_path")
             box_general.row()
 
         """ Globals """
@@ -583,16 +583,12 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         row.label(text="Advanced Settings")
         
         if self.display_advanced:
-            row = box_advanced.row()
-            row.prop(self, "ffmpeg_path")
-            row = box_advanced.row()
-            row.prop(self, "snapshot_directory")
-            row = box_advanced.row()
             split = box_advanced.split(factor=split_width)
-            lft = split.column(align=True) # Left
+
+            lft = split.column() # Left
             fsh = lft.column(align=True)
             txt = "Force generating .bat file" if platform.startswith('win32') else "Force generating .sh file"
-            fsh.prop(self, "bash_flag", text=txt, toggle=True, icon=self.draw_state(self.bash_flag))
+            lft.prop(self, "bash_flag", text=txt, toggle=True, icon=self.draw_state(self.bash_flag))
     
             rsh = lft.row(align=True)
             txt = "Delete temporary .bat Files" if platform.startswith('win32') else "Delete temporary .sh files"
@@ -600,12 +596,17 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             script_folder = bpy.utils.script_path_user()
             rsh.operator(LOOM_OT_open_folder.bl_idname, icon="DISK_DRIVE", text="").folder_path = script_folder
 
-            rgt = split.column(align=True) # Right
+            rgt = split.column() # Right
+            rbg = rgt.column(align=True)
+            rbg.prop(self, "render_background", toggle=True, icon=self.draw_state(self.render_background))
+
+            rgt.column(align=True)
             xtm = rgt.row(align=True)
             xtm.prop(self, "xterm_flag", toggle=True, icon=self.draw_state(self.xterm_flag))
-            rbg = rgt.row(align=True)
-            rbg.prop(self, "render_background", toggle=True, icon=self.draw_state(self.render_background))
-            
+            wp = xtm.operator(LOOM_OT_openURL.bl_idname, icon='HELP', text="")
+            wp.description = "Open the Wikipedia page about Xterm"
+            wp.url = "https://en.wikipedia.org/wiki/Xterm"
+
             """ Linux/OSX specific properties """
             if platform.startswith('win32'):
                 rsh.enabled = False
@@ -614,6 +615,9 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             if platform.startswith('darwin'):
                 fsh.enabled = False
                 rbg.enabled = True
+            
+            box_advanced.row()
+            box_advanced.row().prop(self, "snapshot_directory")
             box_advanced.row()
         
         """ Hotkeys """
@@ -1185,9 +1189,10 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         if scn.render.resolution_percentage < 100:
             row.prop(self, "show_errors", text="", icon='TEXT' if self.show_errors else "REC", emboss=False)
         else:
-            row.operator(LOOM_OT_help.bl_idname, icon='HELP', text="", emboss=False)
-            #row.prop(self, "show_errors", icon='SCRIPT' if self.selection else "HELP", text="", emboss=False)
-            
+            hlp = row.operator(LOOM_OT_openURL.bl_idname, icon='HELP', text="", emboss=False)
+            hlp.description = "Open Loom Documentation on Github"
+            hlp.url = "https://github.com/p2or/blender-loom"
+
         if lum.command_line:
             row = layout.row(align=True)
             row.prop(lum, "override_threads",  icon='PARTICLE_DATA', icon_only=True)
@@ -3274,14 +3279,23 @@ class LOOM_OT_open_preferences(bpy.types.Operator):
         return {'FINISHED'}
         
         
-class LOOM_OT_help(bpy.types.Operator):
-    """Open up Loom Documentation on github"""
-    bl_idname = "loom.open_docs"
+class LOOM_OT_openURL(bpy.types.Operator):
+    """Open URL"""
+    bl_idname = "loom.open_url"
     bl_label = "Documentation"
     bl_options = {'INTERNAL'}
     
+    description: bpy.props.StringProperty()
+    url: bpy.props.StringProperty(
+        name="URL",
+        description = "Open URL in default Browser")
+
+    @classmethod
+    def description(cls, context, properties):
+        return properties.description
+
     def execute(self, context): #self.report({'INFO'}, "")
-        webbrowser.open_new("https://github.com/p2or/blender-loom")
+        webbrowser.open_new(self.url)
         return {'FINISHED'}
 
 
@@ -4957,7 +4971,7 @@ classes = (
     LOOM_OT_open_output_folder,
     LOOM_OT_utils_node_cleanup,
     LOOM_OT_open_preferences,
-    LOOM_OT_help,
+    LOOM_OT_openURL,
     LOOM_OT_render_terminal,
     LOOM_OT_render_image_sequence,
     LOOM_OT_playblast,
