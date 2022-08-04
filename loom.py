@@ -3280,21 +3280,19 @@ class LOOM_OT_open_preferences(bpy.types.Operator):
         
         
 class LOOM_OT_openURL(bpy.types.Operator):
-    """Open URL"""
+    """Open URL in default Browser"""
     bl_idname = "loom.open_url"
     bl_label = "Documentation"
     bl_options = {'INTERNAL'}
     
+    url: bpy.props.StringProperty(name="URL")
     description: bpy.props.StringProperty()
-    url: bpy.props.StringProperty(
-        name="URL",
-        description = "Open URL in default Browser")
 
     @classmethod
     def description(cls, context, properties):
         return properties.description
 
-    def execute(self, context): #self.report({'INFO'}, "")
+    def execute(self, context):
         webbrowser.open_new(self.url)
         return {'FINISHED'}
 
