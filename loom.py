@@ -36,7 +36,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 8, 7),
+    "version": (0, 8, 8),
     "blender": (2, 82, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
@@ -212,11 +212,17 @@ def render_version(self, context):
 
     output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
     for out_node in output_nodes:
+        """ Set base path only """
         if "LAYER" in out_node.format.file_format:
             out_node.base_path = version_number(
                 out_node.base_path, 
                 scene.loom.output_render_version)
         else:
+            """ Set the base path """
+            out_node.base_path = version_number(
+                out_node.base_path, 
+                scene.loom.output_render_version)
+            """ Set all slots """
             for out_file in out_node.file_slots:
                 out_file.path = version_number(
                     out_file.path, 
@@ -985,6 +991,10 @@ class LOOM_OT_guess_frames(bpy.types.Operator):
             name_real = filename_noext.replace("#", "")
             file_pattern = r"{fn}(\d{{{ds}}})\.?{ex}$".format(fn=name_real, ds=hashes, ex=extension)
             seq_name = "{}{}{}".format(name_real, hashes*"#", extension)
+
+            if not os.path.exists(basedir):
+                self.report({'INFO'}, 'Set to default range, "{}" does not exist on disk'.format(basedir))
+                return {"CANCELLED"}
 
             for f in os.scandir(basedir):
                 if f.name.endswith(extension) and f.is_file():
