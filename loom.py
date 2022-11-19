@@ -451,7 +451,8 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
     
     expression: bpy.props.StringProperty(
         name="Expression",
-        description = "Test Expression")
+        description = "Test Expression",
+        options={'SKIP_SAVE'})
     
     project_directory_coll: bpy.props.CollectionProperty(
         name="Project Folders",
@@ -4790,9 +4791,11 @@ def draw_loom_outputpath(self, context):
         file_name = blend_name + "_"
 
     hashes = file_name.count('#')
+
     if not hashes and not scn.loom.is_rendering:
-        # A tiny detail when rendering, might be expensive
+        # A tiny detail when rendering, might be expensive #num_tail = re.split('[^\d]', file_name)[-1]
         if not next(reversed(([x for x in re.findall(r'\d+\b', file_name)])), None):
+            # or not file_name[-1].isdigit():
             file_name = "{}{}".format(file_name, "#"*4)
 
     if file_name.endswith(tuple(scn.render.file_extension)):
