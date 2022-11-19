@@ -4692,7 +4692,7 @@ class LOOM_OT_utils_framerange(bpy.types.Operator):
         row = layout.row(align=True)
         row.prop(self, "start")
         row.prop(self, "end")
-        layout.row()
+        layout.separator(factor=0.5)
 
 
 # -------------------------------------------------------------------
@@ -4791,11 +4791,10 @@ def draw_loom_outputpath(self, context):
         file_name = blend_name + "_"
 
     hashes = file_name.count('#')
-
     if not hashes and not scn.loom.is_rendering:
-        # A tiny detail when rendering, might be expensive #num_tail = re.split('[^\d]', file_name)[-1]
+        # A tiny detail when rendering, might be expensive 
+        # #num_tail = re.split('[^\d]', file_name)[-1], file_name[-1].isdigit():
         if not next(reversed(([x for x in re.findall(r'\d+\b', file_name)])), None):
-            # or not file_name[-1].isdigit():
             file_name = "{}{}".format(file_name, "#"*4)
 
     if file_name.endswith(tuple(scn.render.file_extension)):
@@ -4821,7 +4820,7 @@ def draw_loom_outputpath(self, context):
             sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="RECOVER_LAST", text="").action='RESET'
         sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="WORLD_DATA", text="").action='APPLY'
         #sub_row.operator_enum(LOOM_OT_bake_globals.bl_idname, "action", icon_only=True)
-    layout.row()
+    layout.separator(factor=0.1)
 
 
 def draw_loom_compositor_paths(self, context):
@@ -4858,9 +4857,9 @@ def draw_loom_compositor_paths(self, context):
                     col.template_image_settings(o.format, color_management=False)
                     col.separator()
 
-            box.row()
+            box.separator()
             #box.row().operator(LOOM_OT_utils_node_cleanup.bl_idname)
-            layout.row()
+            layout.separator()
             
 
 def draw_loom_project(self, context):
@@ -4896,7 +4895,7 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         
         col.separator()
         col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
-        col = layout.column()
+        col.separator(factor=1.0)
 
 def draw_loom_dopesheet(self, context):
     if not bpy.context.preferences.addons[__name__].preferences.timeline_extensions:
