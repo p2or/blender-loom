@@ -1352,7 +1352,12 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
             selected_keys = self.all_selected_ctrl_points(context)
         
         if not selected_keys:
-            self.report({'ERROR'}, "No Keyframes assigned to the object(s) in selection.")
+            err_msg = "No Keyframes assigned"
+            if self.scene_objects:
+                err_msg += " to any Object in the Scene."
+            else:
+                err_msg += " to the Object(s) in Selection."
+            self.report({'ERROR'}, err_msg)
             return {"CANCELLED"}
 
         """ Return integers whenever possible """
