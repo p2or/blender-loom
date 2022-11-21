@@ -893,6 +893,11 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         name="Scene Keyframes",
         description="Add selected Keyframes of all Objects to the list",
         default=False)
+    
+    scene_range: bpy.props.BoolProperty(
+        name="Keyframes in Scene range",
+        description="Limit to the frames of the scene",
+        default=False)
 
     all_markers_flag: bpy.props.BoolProperty(
         name="All Markers",
@@ -1244,6 +1249,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     scene_objects: bpy.props.BoolProperty(options={'SKIP_SAVE'})
+    scene_frames: bpy.props.BoolProperty(options={'SKIP_SAVE'})
 
     def int_filter(self, flt):
         try:
@@ -1322,6 +1328,8 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     def invoke(self, context, event):
         if event.alt:
             self.scene_objects = True
+        if event.ctrl:
+            self.scene_frames = True
         return self.execute(context)
 
     def execute(self, context):
@@ -1363,6 +1371,10 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         """ Return integers whenever possible """
         int_frames = [self.int_filter(frame) for frame in selected_keys]
         frames = selected_keys if None in int_frames else int_frames
+
+        if self.scene_frames:
+            scn = context.scene
+            frames = set(frames).intersection(range(scn.frame_start, scn.frame_end+1))
 
         bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(frames))
         return {'FINISHED'}
@@ -4885,18 +4897,21 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         layout = self.layout
         col = layout.column()
         col.label(text="Loom", icon='RENDER_STILL')
-        col = layout.column()
+        col = layout.column(align=True)
         
         row = col.row(align=True)
         row.prop(context.scene.loom, "all_keyframes_flag", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
         ka_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, text="Render Selected Keyframes")
         ka_op.scene_objects = context.scene.loom.all_keyframes_flag
+        #row.prop(context.scene.loom, "scene_range", icon="CON_ACTION", text="")
+        #ka_op.scene_frames = context.scene.loom.scene_range
         
         row = col.row(align=True)
         row.prop(context.scene.loom, "all_markers_flag", icon="TEMP", text="") #"TIME"
         ma_txt = "Render All Markers" if context.scene.loom.all_markers_flag else "Render Active Markers"
         ma_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=ma_txt) # icon='PMARKER_ACT',
         ma_op.all_markers = context.scene.loom.all_markers_flag #PMARKER_SEL
+
         
         col.separator()
         col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
