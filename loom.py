@@ -3142,9 +3142,9 @@ class LOOM_OT_encode_verify_image_sequence(bpy.types.Operator):
 
 
 class LOOM_OT_encode_auto_paths(bpy.types.Operator):
-    """Auto Paths (based on default output)"""
+    """Auto Paths based on the latest Loom render (hold Ctrl to force the use of the default path)"""
     bl_idname = "loom.encode_auto_paths"
-    bl_label = "Set sequence and movie path based on default output"
+    bl_label = "Set sequence and movie path automatically"
     bl_options = {'INTERNAL'}
 
     default_path: bpy.props.BoolProperty(
