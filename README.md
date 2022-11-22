@@ -115,9 +115,9 @@ You can **render specific keyframes** by selecting the keys in the *Timeline*, *
 <!--![Render Selected Keyframes](https://i.stack.imgur.com/PUs71.jpg) -->
 <!-- <img width="608" alt="popover" src="https://user-images.githubusercontent.com/512368/141284257-1f380f00-feb4-40eb-9f64-64df67903edb.png"> -->
 <img width="700" alt="Loom timeline popover" src="https://user-images.githubusercontent.com/512368/141284381-80695c90-a6cb-4dcd-9f12-d068ec16b8f0.png">
-    
-If [Developer Extras](https://docs.blender.org/manual/en/latest/editors/preferences/interface.html) is enabled in the preferences, you can also press <kbd>F3</kbd> and type *Render selected keyframes...* 
-    
+
+Holding down <kbd>Alt</kbd>/<kbd>Option</kbd> while clicking 'Render selected Keyframes' operator to limits the selection of keyframes to the actual scene frame range. You also have the option to hold down <kbd>Ctrl</kbd> when clicking 'Render selected Keyframes' button without any object selected, which will add _all keyframes_ in the scene to the list no matter what's selected. If you hold down <kbd>Ctrl</kbd> as well as <kbd>Alt</kbd>/<kbd>Option</kbd> and when clicking 'Render selected Keyframes' button without any object selected, all keyframes within the scene frame range will be added.
+
 ### File Path Variables
 
 Loom allows to replace of all occurrences of any global variable defined in the *Addon Preferences* via *custom python expressions* for the regular *Output Path* as well as all *File Output* nodes.
