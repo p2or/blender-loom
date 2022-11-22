@@ -1263,7 +1263,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
         return ",".join("-".join(map(str,(g[0],g[-1])[:len(g)])) for g in G)
 
-    def ctrl_points(self, context, object_selection=False, keyframe_selection=True):
+    def keyframes_from_actions(self, context, object_selection=False, keyframe_selection=True):
         """ Returns either selected keys by object selection or all keys """
         actions = bpy.data.actions
         if object_selection:
@@ -1283,7 +1283,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
                         ctrl_points.add(key.co.x)
         return sorted(ctrl_points)
 
-    def keyframes_from_action(self, action):
+    def keyframes_from_channel(self, action):
         """ Returns selected keys based on the action in the action editor """
         ctrl_points = set()
         for channel in action.fcurves:
@@ -1349,7 +1349,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
                 selected_keys = self.selected_gpencil_frames(context)
             
             elif mode == 'ACTION':
-                selected_keys = self.keyframes_from_action(context, space.action)
+                selected_keys = self.keyframes_from_channel(context, space.action)
 
             elif mode == 'MASK':
                 self.report({'ERROR'}, "Not implemented.")
@@ -1365,13 +1365,13 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
                     self.report({'ERROR'}, "No Object(s) selected")
                     return {"CANCELLED"}
 
-                selected_keys = self.ctrl_points(
+                selected_keys = self.keyframes_from_actions(
                         context = context,
                         object_selection = self.limit_to_object_selection, 
                         keyframe_selection = not self.all_keyframes)
 
         elif space.type == 'GRAPH_EDITOR':
-            selected_keys = self.ctrl_points(
+            selected_keys = self.keyframes_from_actions(
                     context = context,
                     object_selection = self.limit_to_object_selection, 
                     keyframe_selection = not self.all_keyframes)
