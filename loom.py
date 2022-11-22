@@ -889,9 +889,9 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         name="Globals Path Collection",
         type=LOOM_PG_paths)
 
-    all_keyframes_flag: bpy.props.BoolProperty(
-        name="Scene Keyframes",
-        description="Add selected Keyframes of all Objects to the list",
+    scene_selection: bpy.props.BoolProperty(
+        name="Limit by Object Selection",
+        description="Only add Keyframes assigned to the Object(s) in Selection",
         default=False)
     
     scene_range: bpy.props.BoolProperty(
@@ -1248,9 +1248,10 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     bl_label = "Render Selected Keyframes"
     bl_options = {'REGISTER'}
 
-    scene_objects: bpy.props.BoolProperty(options={'SKIP_SAVE'})
-    scene_frames: bpy.props.BoolProperty(options={'SKIP_SAVE'})
-
+    limit_to_object_selection: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    limit_to_scene_frames: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    all_keyframes: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    
     def int_filter(self, flt):
         try:
             return int(flt)
@@ -1262,23 +1263,28 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
         return ",".join("-".join(map(str,(g[0],g[-1])[:len(g)])) for g in G)
 
-    def all_selected_ctrl_points(self, context):
-        """ Returns all selected keys in dopesheet """
+    def ctrl_points(self, context, object_selection=False, keyframe_selection=True):
+        """ Returns either selected keys by object selection or all keys """
         actions = bpy.data.actions
-        if not self.scene_objects:
-            actions = [i.animation_data.action for i in context.selected_objects if i.animation_data]
+        if object_selection:
+            obj_actions = [i.animation_data.action for i in context.selected_objects if i.animation_data]
+            if obj_actions:
+                actions = obj_actions
         # There is a select flag for the handles:
         # key.select_left_handle & key.select_right_handle
         ctrl_points = set()
         for action in actions:
             for channel in action.fcurves: #if channel.select:
-                for key in channel.keyframe_points: 
-                    if key.select_control_point:
+                for key in channel.keyframe_points:
+                    if keyframe_selection:
+                        if key.select_control_point:
+                            ctrl_points.add(key.co.x)
+                    else:
                         ctrl_points.add(key.co.x)
         return sorted(ctrl_points)
-    
-    def keyframes_from_action(self, context, action):
-        """Returns selected keys based on the action in the action editor"""
+
+    def keyframes_from_action(self, action):
+        """ Returns selected keys based on the action in the action editor """
         ctrl_points = set()
         for channel in action.fcurves:
             for key in channel.keyframe_points:
@@ -1287,15 +1293,15 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         return sorted(ctrl_points)
 
     def selected_ctrl_points(self, context):
-        """Returns selected keys in the dopesheet if a channel is selected"""
+        """ Returns selected keys in the dopesheet if a channel is selected """
         ctrl_points = set()
         for sel_keyframe in context.selected_editable_keyframes:
             if sel_keyframe.select_control_point:
                     ctrl_points.add(sel_keyframe.co.x)
         return sorted(ctrl_points)
 
-    def channel_ctrl_points(self, context):
-        """Returns all keys of selected channels in dopesheet"""
+    def channel_ctrl_points(self):
+        """ Returns all keys of selected channels in dopesheet """
         ctrl_points = set()
         for action in bpy.data.actions:
             for channel in action.fcurves:
@@ -1326,10 +1332,10 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
             not context.scene.render.is_movie_format
     
     def invoke(self, context, event):
-        if event.alt:
-            self.scene_objects = True
         if event.ctrl:
-            self.scene_frames = True
+            self.all_keyframes = True
+        if event.alt:
+            self.limit_to_scene_frames = True
         return self.execute(context)
 
     def execute(self, context):
@@ -1354,27 +1360,36 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
                 return {"CANCELLED"}
 
             else: # Mode can be: DOPESHEET, 'SHAPEKEY'
-                selected_keys = self.all_selected_ctrl_points(context)
-                
+                # if context.space_data.mode == 'DOPESHEET':
+                if self.limit_to_object_selection and not context.selected_objects:
+                    self.report({'ERROR'}, "No Object(s) selected")
+                    return {"CANCELLED"}
+
+                selected_keys = self.ctrl_points(
+                        context = context,
+                        object_selection = self.limit_to_object_selection, 
+                        keyframe_selection = not self.all_keyframes)
+
         elif space.type == 'GRAPH_EDITOR':
-            selected_keys = self.all_selected_ctrl_points(context)
+            selected_keys = self.ctrl_points(
+                    context = context,
+                    object_selection = self.limit_to_object_selection, 
+                    keyframe_selection = not self.all_keyframes)
         
         if not selected_keys:
-            err_msg = "No Keyframes assigned"
-            if self.scene_objects:
-                err_msg += " to any Object in the Scene."
-            else:
-                err_msg += " to the Object(s) in Selection."
-            self.report({'ERROR'}, err_msg)
+            self.report({'ERROR'}, "No Keyframes selected")
             return {"CANCELLED"}
 
         """ Return integers whenever possible """
         int_frames = [self.int_filter(frame) for frame in selected_keys]
         frames = selected_keys if None in int_frames else int_frames
 
-        if self.scene_frames:
+        if self.limit_to_scene_frames:
             scn = context.scene
             frames = set(frames).intersection(range(scn.frame_start, scn.frame_end+1))
+            if not frames:
+                self.report({'ERROR'}, "No frames keyframes in scene range")
+                return {"CANCELLED"}
 
         bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(frames))
         return {'FINISHED'}
@@ -4897,14 +4912,14 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         layout = self.layout
         col = layout.column()
         col.label(text="Loom", icon='RENDER_STILL')
-        col = layout.column(align=True)
+        col = layout.column()
         
         row = col.row(align=True)
-        row.prop(context.scene.loom, "all_keyframes_flag", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
+        row.prop(context.scene.loom, "scene_selection", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
         ka_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, text="Render Selected Keyframes")
-        ka_op.scene_objects = context.scene.loom.all_keyframes_flag
+        ka_op.limit_to_object_selection = context.scene.loom.scene_selection
         #row.prop(context.scene.loom, "scene_range", icon="CON_ACTION", text="")
-        #ka_op.scene_frames = context.scene.loom.scene_range
+        #ka_op.limit_to_scene_frames = context.scene.loom.scene_range
         
         row = col.row(align=True)
         row.prop(context.scene.loom, "all_markers_flag", icon="TEMP", text="") #"TIME"
@@ -4912,7 +4927,6 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         ma_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=ma_txt) # icon='PMARKER_ACT',
         ma_op.all_markers = context.scene.loom.all_markers_flag #PMARKER_SEL
 
-        
         col.separator()
         col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
         col.separator(factor=1.0)
