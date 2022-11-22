@@ -85,7 +85,7 @@ If [FFmpeg](https://www.ffmpeg.org/) is installed on your machine and set up pro
 ### Options
  - Select `ProRes 4444 XQ` to get an **alpha channel**
  - You can **verify the image sequence** on disk before encoding by clicking the *Verify Image Sequence* operator ![I1](https://i.stack.imgur.com/JovW0.jpg), which also detects all frames missing frames of the sequence
- - In case there are **missing frames**, the addon either provides an utility function to fill the gaps of the image sequence with copies of the nearest frame to get the full lenght animation and another operator to render all missing frames (make sure *Verfify Sequence* is enabled when selecting a frame in the file browser <kbd>N</kbd>).
+ - In case there are **missing frames**, the addon either provides an utility function to fill the gaps of the image sequence with copies of the nearest frame to get the full lenght animation and another operator to render all missing frames (make sure *Verfify Sequence* is enabled when selecting a frame in the file browser <kbd>N</kbd>)
  
    <!-- ![Encode Image Sequence Dialog](https://i.stack.imgur.com/ul9ld.jpg) -->
 
@@ -116,7 +116,11 @@ You can **render specific keyframes** by selecting the keys in the *Timeline*, *
 <!-- <img width="608" alt="popover" src="https://user-images.githubusercontent.com/512368/141284257-1f380f00-feb4-40eb-9f64-64df67903edb.png"> -->
 <img width="700" alt="Loom timeline popover" src="https://user-images.githubusercontent.com/512368/141284381-80695c90-a6cb-4dcd-9f12-d068ec16b8f0.png">
 
-Holding down <kbd>Alt</kbd>/<kbd>Option</kbd> while clicking 'Render selected Keyframes' operator to limits the selection of keyframes to the actual scene frame range. You also have the option to hold down <kbd>Ctrl</kbd> when clicking 'Render selected Keyframes' button without any object selected, which will add _all keyframes_ in the scene to the list no matter what's selected. If you hold down <kbd>Ctrl</kbd> as well as <kbd>Alt</kbd>/<kbd>Option</kbd> and when clicking 'Render selected Keyframes' button without any object selected, all keyframes within the scene frame range will be added.
+#### Options
+
+ - Holding down <kbd>Ctrl</kbd> while clicking 'Render Selected Keyframes' button will add all keyframes to the list, regardless of what's selected in the _Timeline, Graph Editor or Dopesheet_
+ - Holding down <kbd>Alt</kbd> or <kbd>Option</kbd> while clicking the 'Render Selected Keyframes' operator limits the selection of keyframes to the current _frame range of the scene_
+ - If you hold down <kbd>Ctrl</kbd> and <kbd>Alt</kbd> or <kbd>Option</kbd> when clicking 'Render selected Keyframes' operator without any object selected, _all keyframes_ within the _frame range of the scene_ are be added to the list
 
 ### File Path Variables
 
