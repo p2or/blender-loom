@@ -894,9 +894,9 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         description="Only add Keyframes assigned to the Object(s) in Selection",
         default=False)
     
-    scene_range: bpy.props.BoolProperty(
-        name="Keyframes in Scene range",
-        description="Limit to the frames of the scene",
+    ignore_scene_range: bpy.props.BoolProperty(
+        name="Ignore Scene Range",
+        description="Do not take the Frame Range of the Scene into account",
         default=False)
 
     all_markers_flag: bpy.props.BoolProperty(
@@ -2479,7 +2479,7 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
                 if match: image_sequence[int(match.group(1))] = os.path.join(basedir, f.name)
 
         if not len(image_sequence) > 1:
-            self.report({'WARNING'},"No valid image sequence")
+            self.report({'ERROR'},"'{}' cannot be found on disk".format(filename))
             bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
@@ -2577,7 +2577,7 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         else:
             sub.operator(LOOM_OT_encode_auto_paths.bl_idname, text="", icon='AUTO') #GHOST_ENABLED, SEQUENCE
         sel_sequence = sub.operator(LOOM_OT_load_image_sequence.bl_idname, text="", icon='FILE_TICK')
-        sel_sequence.verify_sequence = False
+        #sel_sequence.verify_sequence = False
 
         split = layout.split(factor=split_width)
         col = split.column(align=True)
@@ -2609,14 +2609,17 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         sub.operator(LOOM_OT_encode_select_movie.bl_idname, text="", icon='FILE_TICK')
         
         if lum.lost_frames:
-            row = layout.row()
-            row = layout.row(align=True)
-            fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, icon='RENDER_RESULT', text="Fill Gaps with Copies")
+            layout.separator()
+            spl = layout.split(factor=0.5)
+            row = spl.row(align=True)
+            row.prop(lum, "ignore_scene_range", text="", icon='RENDER_RESULT')
+            fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, text="Fill Gaps with Copies")
             fg.sequence_path = lum.sequence_encode
+            fg.scene_range = lum.ignore_scene_range
             txt = "Render Missing Frames"
-            di = row.operator(LOOM_OT_render_input_dialog.bl_idname, icon='RENDER_STILL', text=txt)
+            di = spl.operator(LOOM_OT_render_input_dialog.bl_idname, icon='RENDER_STILL', text=txt)
             di.frame_input = lum.lost_frames
-        row = layout.row()
+        layout.separator(factor=1.5)
 
 
 class LOOM_OT_rename_dialog(bpy.types.Operator):
@@ -2846,7 +2849,15 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
     verify_sequence: bpy.props.BoolProperty(
             name="Verify Image Sequence",
             description="Detects missing frames",
-            default=True)
+            default=True,
+            options={'SKIP_SAVE'})
+    
+    scene_range: bpy.props.BoolProperty(
+            name="Scene Range",
+            description="Consider the Frames of the Scene",
+            default=False,
+            #options={'SKIP_SAVE'}
+            )
 
     def number_suffix(self, filename):
         regex = re.compile(r'\d+\b')
@@ -2897,6 +2908,11 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
         filename_noext, ext = os.path.splitext(filename)
         frame_suff = self.number_suffix(filename)
 
+        if not os.path.isfile(self.filepath):
+            self.report({'WARNING'},"Please select one image of an image sequence")
+            self.display_popup(context)
+            return {"CANCELLED"}
+
         if not frame_suff:
             self.report({'WARNING'},"No valid image sequence")
             self.display_popup(context)
@@ -2922,6 +2938,12 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
             """ Detect missing frames """  #start_frame, end_frame = fn[0], fn[-1]
             frame_numbers = sorted(list(image_sequence.keys()))
             missing_frame_list = self.missing_frames(frame_numbers)
+
+            if frame_numbers and self.scene_range:
+                scn = context.scene
+                missing_frame_list += range(scn.frame_start, frame_numbers[0])
+                missing_frame_list += range(frame_numbers[-1]+1, scn.frame_end+1)
+                missing_frame_list = sorted(missing_frame_list)
 
             if missing_frame_list:
                 lum.lost_frames = self.rangify_frames(missing_frame_list)
@@ -3026,6 +3048,13 @@ class LOOM_OT_encode_verify_image_sequence(bpy.types.Operator):
     bl_label = "Verify Image Sequence"
     bl_options = {'INTERNAL'}
 
+    scene_range: bpy.props.BoolProperty(
+        name="Scene Range",
+        description="Consider the Frames of the Scene",
+        default=True,
+        options={'SKIP_SAVE'}
+        )
+
     def rangify_frames(self, frames):
         """ Convert list of integers to Range string [1,2,3] -> '1-3' """
         G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
@@ -3084,12 +3113,20 @@ class LOOM_OT_encode_verify_image_sequence(bpy.types.Operator):
         """ Detect missing frames """
         frame_numbers = sorted(list(image_sequence.keys()))
         missing_frame_list = self.missing_frames(frame_numbers)
+        msg = "(based on the image sequence found on disk)"
+
+        if frame_numbers and self.scene_range:
+            scn = context.scene
+            missing_frame_list += range(scn.frame_start, frame_numbers[0])
+            missing_frame_list += range(frame_numbers[-1]+1, scn.frame_end+1)
+            missing_frame_list = sorted(missing_frame_list)
+            msg = "(based on the frame range of the scene)"
 
         if missing_frame_list:
             lum.lost_frames = self.rangify_frames(missing_frame_list)
             context.window_manager.clipboard = "{}".format(
                 ','.join(map(str, missing_frame_list)))
-            error_massage = "Missing frames detected: {}".format(self.rangify_frames(missing_frame_list))
+            error_massage = "Missing frames detected {}: {}".format(msg, self.rangify_frames(missing_frame_list))
             self.report({'ERROR'}, error_massage)
             self.report({'ERROR'},"Frame list copied to clipboard.")
         else:
@@ -3097,6 +3134,11 @@ class LOOM_OT_encode_verify_image_sequence(bpy.types.Operator):
                 filename_noext, ext, self.rangify_frames(frame_numbers)))
             lum.lost_frames = ""
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        if event.alt or event.ctrl:
+            self.scene_range = False
+        return self.execute(context)
 
 
 class LOOM_OT_encode_auto_paths(bpy.types.Operator):
@@ -3104,6 +3146,12 @@ class LOOM_OT_encode_auto_paths(bpy.types.Operator):
     bl_idname = "loom.encode_auto_paths"
     bl_label = "Set sequence and movie path based on default output"
     bl_options = {'INTERNAL'}
+
+    default_path: bpy.props.BoolProperty(
+        name="Default Output Path",
+        description="Use the default Output Path",
+        default=False,
+        options={'SKIP_SAVE'})
 
     def number_suffix(self, filename):
         regex = re.compile(r'\d+\b')
@@ -3120,6 +3168,15 @@ class LOOM_OT_encode_auto_paths(bpy.types.Operator):
         basedir = os.path.realpath(bpy.path.abspath(basedir))
         filename_noext, ext = os.path.splitext(filename)
         num_suff = self.number_suffix(filename_noext)
+        report_msg = "Sequence path set based on default output path"
+
+        if lum.render_collection and not self.default_path:
+            latest_frame = lum.render_collection[-1]
+            basedir = latest_frame.file_path # Absolute or Relative?
+            num_suff = "0".zfill(latest_frame.padded_zeros)
+            filename_noext = latest_frame.name + num_suff
+            ext = ".{}".format(latest_frame.image_format)
+            report_msg = "Sequence path set based on latest Loom render"
         
         if not lum.movie_path:
             movie_noext = filename_noext.replace(num_suff, "")
@@ -3129,9 +3186,13 @@ class LOOM_OT_encode_auto_paths(bpy.types.Operator):
         filename_noext = filename_noext.replace(num_suff, "#"*len(num_suff))
         sequence_name = "{}{}".format(filename_noext, ext)
         lum.sequence_encode = "{}".format(os.path.join(basedir, sequence_name))
-        self.report({'INFO'}, "Sequence path set (based on default output path)")   
-        
+        self.report({'INFO'}, report_msg)
         return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        if event.alt or event.ctrl:
+            self.default_path = True
+        return self.execute(context)
 
 
 class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
@@ -3141,6 +3202,13 @@ class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
     bl_options = {'INTERNAL'}
     
     sequence_path: bpy.props.StringProperty()
+    scene_range: bpy.props.BoolProperty(default=True, options={'SKIP_SAVE'})
+
+    def re_path(self, basedir, name_real, frame, hashes, extension):
+        return os.path.join(
+            basedir, 
+            "{n}{f:0{h}d}{e}".format(n=name_real, f=frame, h=hashes, e=extension)
+            )
 
     def missing_frames(self, frames):
         return sorted(set(range(frames[0], frames[-1] + 1)).difference(frames))
@@ -3179,14 +3247,23 @@ class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
         if missing_frame_list:
             frames_to_copy = {}
             f_prev = frame_numbers[0]
-            for f in range(frame_numbers[0], frame_numbers[-1]+1):
-                if f not in image_sequence:
-                    path_copy = os.path.join(basedir, 
-                        "{name}{frame:0{digits}d}{extension}".format(
-                            name=name_real, frame=f, digits=hashes, extension=ext))
+            for frame in range(frame_numbers[0], frame_numbers[-1]+1):
+                if frame not in image_sequence:
+                    path_copy = self.re_path(basedir, name_real, frame, hashes, ext)
                     frames_to_copy.setdefault(image_sequence[f_prev], []).append(path_copy)
                 else:
-                    f_prev = f
+                    f_prev = frame
+
+            """ Extend to frame range of the scene """
+            if self.scene_range:
+                for i in range(context.scene.frame_start, frame_numbers[0]):
+                    path_copy = self.re_path(basedir, name_real, i, hashes, ext)
+                    frames_to_copy.setdefault(image_sequence[frame_numbers[0]], []).append(path_copy)
+                
+                for o in range(frame_numbers[-1]+1, context.scene.frame_end+1):
+                    path_copy = self.re_path(basedir, name_real, o, hashes, ext)
+                    frames_to_copy.setdefault(image_sequence[frame_numbers[-1]], []).append(path_copy)
+
             try:
                 from shutil import copyfile
                 for src, dest in frames_to_copy.items():
@@ -3197,6 +3274,7 @@ class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
                 lum.lost_frames = ""
             except OSError:
                 self.report({'ERROR'}, "Error while trying to copy frames")
+
         else:
             self.report({'INFO'},"Nothing to do")
         return {'FINISHED'}
