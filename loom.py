@@ -3527,7 +3527,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
     _image_formats = {'BMP': 'bmp', 'IRIS': 'iris', 'PNG': 'png', 'JPEG': 'jpg', 
         'JPEG2000': 'jp2', 'TARGA': 'tga', 'TARGA_RAW': 'tga', 'CINEON': 'cin', 
         'DPX': 'dpx', 'OPEN_EXR_MULTILAYER': 'exr', 'OPEN_EXR': 'exr', 'HDR': 'hdr', 
-        'TIFF': 'tif', 'SUPPLEMENT1': 'tiff', 'SUPPLEMENT2': 'jpeg'}
+        'TIFF': 'tif', 'WEBP': 'webp', 'SUPPLEMENT1': 'tiff', 'SUPPLEMENT2': 'jpeg'}
 
     _rendered_frames, _skipped_frames = [], []
     _timer = _frames = _stop = _rendering = _dec = _log = None
@@ -3858,7 +3858,7 @@ class LOOM_OT_playblast(bpy.types.Operator):
 
     def execute(self, context):
         scn = context.scene
-        lum = context.scene.loom
+        lum = scn.loom
         prefs = context.preferences.addons[__name__].preferences #prefs.user_player = True
         glob_vars = prefs.global_variable_coll
         preview_filetype = "jpg" if scn.render.image_settings.use_preview else None
@@ -4878,34 +4878,34 @@ def draw_loom_version_number(self, context):
 
 def draw_loom_outputpath(self, context):
     """Append compiled file path using globals to the Output Area"""
-    if bpy.context.preferences.addons[__name__].preferences.output_extensions:
-        return
+    prefs = context.preferences.addons[__name__].preferences
+    glob_vars = prefs.global_variable_coll
     scn = context.scene
-    if not scn.render.filepath:
+
+    if prefs.output_extensions or not scn.render.filepath:
         return
-    glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
-    fp = bpy.path.abspath(scn.render.filepath)
-    output_folder, file_name = os.path.split(fp)
+
+    output_folder, file_name = os.path.split(bpy.path.abspath(scn.render.filepath))
     output_folder = os.path.realpath(output_folder)
-    globals_flag = False
     
+    if not file_name and bpy.data.is_saved:
+        blend_name, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
+        file_name = blend_name + "_" # What about a dot?
+
+    if not file_name.count('#'): # and not scn.loom.is_rendering:
+        # A tiny detail when rendering, might be expensive
+        # num_tail = re.split('[^\d]', file_name)[-1], file_name[-1].isdigit():
+        #if not next(reversed(([x for x in re.findall(r'\d+\b', file_name)])), None):
+        if not bool(re.search(r'\d+\.[a-zA-Z0-9]{3,4}\b', file_name)):
+            file_name = "{}{}".format(file_name, "#"*4)
+    
+    globals_flag = False
     if any(ext in file_name for ext in glob_vars.keys()):
         file_name = replace_globals(file_name)
         globals_flag = True
     if any(ext in output_folder for ext in glob_vars.keys()):
         output_folder = replace_globals(output_folder)
         globals_flag = True
-    
-    if not file_name and bpy.data.is_saved:
-        blend_name, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
-        file_name = blend_name + "_"
-
-    hashes = file_name.count('#')
-    if not hashes and not scn.loom.is_rendering:
-        # A tiny detail when rendering, might be expensive 
-        # #num_tail = re.split('[^\d]', file_name)[-1], file_name[-1].isdigit():
-        if not next(reversed(([x for x in re.findall(r'\d+\b', file_name)])), None):
-            file_name = "{}{}".format(file_name, "#"*4)
 
     if file_name.endswith(tuple(scn.render.file_extension)):
         file_path = os.path.join(output_folder, file_name)
