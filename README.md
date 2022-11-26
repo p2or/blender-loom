@@ -105,7 +105,6 @@ Once you add `v` and some arbitrary number to the *Output Path*, a new 'slider' 
 <img width="700" alt="Render Version" src="https://user-images.githubusercontent.com/512368/180618398-cb566e95-53cd-4f37-ad1d-6aeed1b184d6.gif">
 
 
-
 If you'd like to remove all version strings in your *File Output* nodes, hit <kbd>F3</kbd> and type `Remove version str...` 
 
 ### Render specific Keyframes
@@ -118,6 +117,8 @@ You can **render specific keyframes** by selecting the keys in the *Timeline*, *
 
 #### Options
 
+ - If _Limit by Object Selection_ toggle <img width="16" alt="limit_by_object-in-selection" src="https://user-images.githubusercontent.com/512368/204095616-19d16715-91be-4210-81b1-d30eb263d3bb.png">
+is enabled, only the keyframes of the selected objects in the scene are added to the list
  - Holding down <kbd>Ctrl</kbd> while clicking 'Render Selected Keyframes' button will add all keyframes to the list, regardless of what's selected in the _Timeline, Graph Editor or Dopesheet_
  - Holding down <kbd>Alt</kbd> or <kbd>Option</kbd> while clicking the 'Render Selected Keyframes' operator limits the selection of keyframes to the current _frame range of the scene_
  - If you hold down <kbd>Ctrl</kbd> and <kbd>Alt</kbd> or <kbd>Option</kbd> when clicking 'Render selected Keyframes' operator without any object selected, _all keyframes_ within the _frame range of the scene_ are be added to the list
