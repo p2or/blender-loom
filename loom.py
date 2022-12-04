@@ -1658,6 +1658,9 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             bpy.ops.loom.batch_render_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
+        # Wrap blender binary path in quotations
+        bl_bin = '"{}"'.format(bpy.app.binary_path) if not platform.startswith('win32') else bpy.app.binary_path
+
         cli_arg_dict = {}
         for c, item in enumerate(lum.batch_render_coll):
             python_expr = ("import bpy;" +\
@@ -1669,7 +1672,6 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
                         iel=item.input_filter, 
                         cli=True)
 
-            bl_bin = '"{}"'.format(bpy.app.binary_path) if platform.startswith('darwin') else bpy.app.binary_path
             cli_args = [bl_bin, "-b", item.path, "--python-expr", python_expr]
             cli_arg_dict[c] = cli_args
 
@@ -1682,11 +1684,10 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
                             "bpy.ops.loom.encode_dialog(" +\
                             "sequence=seq_path, terminal_instance=False, pause=False)")
 
-                bl_bin = '"{}"'.format(bpy.app.binary_path) if platform.startswith('darwin') else bpy.app.binary_path
                 cli_args = [bl_bin, "-b", item.path, "--python-expr", python_expr]
                 cli_arg_dict[c+coll_len] = cli_args
 
-        """ Start headless batch encoding """
+        """ Start headless batch """
         bpy.ops.loom.run_terminal(
             #debug_arguments=True,
             binary="",
@@ -4138,8 +4139,8 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
         try:
             fp = open(bash_path, 'w')
             fp.write('#! /bin/sh\n')
-
             bl_bin = '"{}"'.format(self.binary) # if platform.startswith('darwin') else self.binary
+            
             if isinstance(bash_args[0], list):
                 bash_args = [[bl_bin] + i if self.binary else i for i in bash_args]
 
@@ -4154,7 +4155,6 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
                     fp.write(" ".join(i) + "\n")
             else:
                 bash_args = [bl_bin] + bash_args if self.binary else bash_args
-
                 """ Add quotes to python command """
                 bash_args = ["{b}{e}{b}".format(b='\"', e=x) \
                     if x.startswith("import") else x for x in bash_args]
@@ -4317,7 +4317,6 @@ class LOOM_OT_delete_bash_files(bpy.types.Operator):
     
     def execute(self, context):
         prefs = context.preferences.addons[__name__].preferences
-        bash_file = prefs.bash_file
 
         rem_lst = []
         for f in os.scandir(bpy.utils.script_path_user()):
