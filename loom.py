@@ -832,9 +832,9 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         description="Determine whether Loom is rendering",
         default=False)
 
-    override_threads: bpy.props.BoolProperty(
-        name="Override CPU thread count",
-        description="Force to render with specified thread count (CPU)",
+    override_render_settings: bpy.props.BoolProperty(
+        name="Override render settings",
+        description="Force to render with specified settings",
         default=False)
 
     threads: bpy.props.IntProperty(
@@ -1164,6 +1164,9 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         if user_error: #bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
+        if not lum.override_render_settings:
+            lum.property_unset("custom_render_presets")
+            
         """ Start rendering headless or within the UI as usual """
         if lum.command_line:
             bpy.ops.loom.render_terminal(
@@ -1186,7 +1189,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         
         if not lum.is_property_set("frame_input") or not lum.frame_input:
             bpy.ops.loom.guess_frames(detect_missing_frames=False)
-        lum.custom_render_presets = 'EMPTY' # Reset Preset Property
+        #lum.property_unset("custom_render_presets") # Reset Preset Property
 
         if not prefs.is_property_set("terminal") or not prefs.terminal:
             bpy.ops.loom.verify_terminal()
@@ -1237,19 +1240,22 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
 
         if lum.command_line:
             row = layout.row(align=True)
+            row.prop(lum, "override_render_settings",  icon='PARTICLE_DATA', icon_only=True)
             if len(render_preset_callback(scn, context)) > 1:
-                split = row.split(factor=split_factor)
-                split.label(text="Preset:")
-                split.prop(lum, "custom_render_presets", text="")
-                layout.separator(factor=0.5)
-
+                #split = row.split(factor=split_factor)
+                #split.label(text="Preset:")
+                #row = layout.row(align=True)
+                preset = row.row(align=True)
+                preset.prop(lum, "custom_render_presets", text="")
+                preset.enabled = lum.override_render_settings
             else:
-                row.prop(lum, "override_threads",  icon='PARTICLE_DATA', icon_only=True)
                 thr_elem = row.row(align=True)
-                thr_elem.active = bool(lum.command_line and lum.override_threads)
+                thr_elem.active = bool(lum.command_line and lum.override_render_settings)
                 thr_elem.prop(lum, "threads")
                 thr_elem.operator(LOOM_OT_render_threads.bl_idname, icon='LOOP_BACK', text="")
-        
+            
+            layout.separator(factor=0.1)
+
         if self.show_errors:
             res_percentage = scn.render.resolution_percentage
             if res_percentage < 100:
