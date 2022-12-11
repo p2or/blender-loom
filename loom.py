@@ -26,6 +26,8 @@ import rna_keymap_ui
 import webbrowser
 
 from bpy_extras.io_utils import ImportHelper, ExportHelper
+from bl_operators.presets import AddPresetBase
+from bl_ui.utils import PresetPanel
 from numpy import arange, around, isclose
 from itertools import count, groupby
 from time import strftime
@@ -477,6 +479,12 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
     display_hotkeys: bpy.props.BoolProperty(
         default=True)
 
+    render_presets_path: bpy.props.StringProperty(
+        subtype = "FILE_PATH",
+        default = bpy.utils.user_resource(
+            'SCRIPTS',
+            path=os.path.join("presets", "loom/rndr_presets")))
+
     def draw_state(self, prop):
         return 'RADIOBUT_OFF' if not prop else 'RADIOBUT_ON'
 
@@ -758,6 +766,16 @@ class LOOM_OT_directories_ui(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def render_preset_callback(scene, context):
+    items = [('EMPTY', "Current Render Settings", "")]
+    for f in os.listdir(context.preferences.addons[__name__].preferences.render_presets_path):
+         if not f.startswith(".") and f.endswith(".py"):
+             fn, ext = os.path.splitext(f)
+             #d = bpy.path.display_name(os.path.join(rndr_presets_path, f))
+             items.append((f, "{}".format(fn), ""))
+    return items
+
+
 class LOOM_PG_render(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
     render_id: bpy.props.IntProperty()
@@ -792,7 +810,6 @@ class LOOM_PG_paths(bpy.types.PropertyGroup):
     orig: bpy.props.StringProperty()
     repl: bpy.props.StringProperty()
     slts: bpy.props.CollectionProperty(name="Slot Collection", type=LOOM_PG_slots)
-
 
 class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
 
@@ -903,7 +920,12 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         name="All Markers",
         description="Add all Markers to the list",
         default=False)
-
+    
+    custom_render_presets: bpy.props.EnumProperty(
+        name="Render Preset",
+        description="Select a Custom Preset",
+        items=render_preset_callback,
+        options={'SKIP_SAVE'})
 
 # -------------------------------------------------------------------
 #    UI Operators
@@ -1145,9 +1167,11 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         """ Start rendering headless or within the UI as usual """
         if lum.command_line:
             bpy.ops.loom.render_terminal(
+                #debug=True,
                 frames = user_input,
                 threads = lum.threads,
-                isolate_numbers = filter_individual_numbers)
+                isolate_numbers = filter_individual_numbers,
+                render_preset=lum.custom_render_presets)
         else:
             bpy.ops.render.image_sequence(
                 frames = user_input, 
@@ -1162,6 +1186,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         
         if not lum.is_property_set("frame_input") or not lum.frame_input:
             bpy.ops.loom.guess_frames(detect_missing_frames=False)
+        lum.custom_render_presets = 'EMPTY' # Reset Preset Property
 
         if not prefs.is_property_set("terminal") or not prefs.terminal:
             bpy.ops.loom.verify_terminal()
@@ -1177,8 +1202,9 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         prefs = context.preferences.addons[__name__].preferences
         layout = self.layout  #layout.label(text="Render Image Sequence")
         pref_view = context.preferences.view
+        split_factor = .17
 
-        split = layout.split(factor=.17)
+        split = layout.split(factor=split_factor)
         col = split.column(align=True)
         col.label(text="Frames:")
         col = split.column(align=True)
@@ -1190,7 +1216,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         #sub.prop(lum, "filter_keyframes", icon='SPACE2', icon_only=True)
         sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="")
 
-        split = layout.split(factor=.17)
+        split = layout.split(factor=split_factor)
         col = split.column(align=True)
         col.active = not lum.command_line
         col.label(text="Display:")
@@ -1211,11 +1237,18 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
 
         if lum.command_line:
             row = layout.row(align=True)
-            row.prop(lum, "override_threads",  icon='PARTICLE_DATA', icon_only=True)
-            thr_elem = row.row(align=True)
-            thr_elem.active = bool(lum.command_line and lum.override_threads)
-            thr_elem.prop(lum, "threads")
-            thr_elem.operator(LOOM_OT_render_threads.bl_idname, icon='LOOP_BACK', text="")
+            if len(render_preset_callback(scn, context)) > 1:
+                split = row.split(factor=split_factor)
+                split.label(text="Preset:")
+                split.prop(lum, "custom_render_presets", text="")
+                layout.separator(factor=0.5)
+
+            else:
+                row.prop(lum, "override_threads",  icon='PARTICLE_DATA', icon_only=True)
+                thr_elem = row.row(align=True)
+                thr_elem.active = bool(lum.command_line and lum.override_threads)
+                thr_elem.prop(lum, "threads")
+                thr_elem.operator(LOOM_OT_render_threads.bl_idname, icon='LOOP_BACK', text="")
         
         if self.show_errors:
             res_percentage = scn.render.resolution_percentage
@@ -3450,6 +3483,10 @@ class LOOM_OT_render_terminal(bpy.types.Operator):
         description="Filter raw elements in frame input",
         default=False)
 
+    render_preset: bpy.props.StringProperty(
+        name="Render Preset",
+        description="Pass a custom Preset.py")
+
     debug: bpy.props.BoolProperty(
         name="Debug Arguments",
         description="Print full argument list",
@@ -3475,17 +3512,18 @@ class LOOM_OT_render_terminal(bpy.types.Operator):
     def execute(self, context):
         prefs = context.preferences.addons[__name__].preferences
 
-        if bpy.data.is_dirty:  # Save latest changes
+        if bpy.data.is_dirty: # Save latest changes
             bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
 
         python_expr = ("import bpy;" +\
                 "bpy.ops.render.image_sequence(" +\
                 "frames='{fns}', isolate_numbers={iel}," +\
-                "render_silent={cli}, digits={lzs})").format(
+                "render_silent={cli}, digits={lzs}, render_preset='{pst}')").format(
                     fns=self.frames,
                     iel=self.isolate_numbers, 
                     cli=True, 
-                    lzs=self.digits)
+                    lzs=self.digits,
+                    pst=self.render_preset)
 
         cli_args = ["-b", bpy.data.filepath, "--python-expr", python_expr]
         
@@ -3526,6 +3564,10 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         name="Digits",
         description="Specify digits in filename",
         default=4)
+    
+    render_preset: bpy.props.StringProperty(
+        name="Render Preset",
+        description="Pass a custom Preset.py")
 
     _image_formats = {'BMP': 'bmp', 'IRIS': 'iris', 'PNG': 'png', 'JPEG': 'jpg', 
         'JPEG2000': 'jp2', 'TARGA': 'tga', 'TARGA_RAW': 'tga', 'CINEON': 'cin', 
@@ -3753,6 +3795,13 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         
         """ Render silent """
         if self.render_silent:
+
+            """ Apply custom Render Preset """
+            if self.render_preset and self.render_preset != "EMPTY":
+                bpy.ops.script.execute_preset(
+                    filepath=os.path.join(prefs.render_presets_path,self.render_preset),
+                    menu_idname=LOOM_PT_RenderPresets.__name__)
+            
             for frame_number in self._frames:
                 self.frame_repath(scn, frame_number)
                 self.start_render(scn, frame_number, silent=True)
@@ -4811,6 +4860,105 @@ class LOOM_OT_utils_framerange(bpy.types.Operator):
 #    Panels and Menus
 # -------------------------------------------------------------------
 
+class LOOM_OT_RenderPreset(AddPresetBase, bpy.types.Operator):
+    bl_idname = 'loom.render_preset'
+    bl_label = 'Add a new Render Preset'
+    preset_menu = 'LOOM_MT_RenderPresets'
+    
+    """
+    -> https://docs.blender.org/api/current/bpy.types.Menu.html#preset-menus
+    -> https://blender.stackexchange.com/a/211543
+    -> scripts/statup/preset.py
+    """
+    
+    preset_defines = [
+                    'scene = bpy.context.scene',
+                    'render = scene.render'
+                     ]
+    
+    preset_values = [
+                    'render.engine',
+                    'render.film_transparent',
+                    'render.filter_size',
+                    'render.pixel_aspect_x',
+                    'render.pixel_aspect_y',
+                    'render.fps',
+                    'render.filepath',
+                    'render.fps_base',
+                    'render.frame_map_new',
+                    'render.frame_map_old',
+                    'render.resolution_x',
+                    'render.resolution_y',
+                    'render.threads',
+                    'render.use_border',
+                    'render.use_crop_to_border',
+                    'render.use_high_quality_normals',
+                    'render.use_motion_blur',
+                    'render.use_persistent_data',
+                    'render.use_simplify',
+                    'render.image_settings.file_format',
+                    'render.image_settings.color_mode',
+                    'render.image_settings.color_depth',
+                    'render.use_overwrite',
+                    'render.use_placeholder'
+                    ]
+    
+    # Directory to store the presets
+    preset_subdir = "loom/rndr_presets"
+
+    if hasattr(bpy.context, "scene"):
+        scene = bpy.context.scene
+        ignore_attribs = ('_', 'bl_', 'rna', 'reg', 'unreg', 'name')
+        
+        # File Format Settings
+        image_settings = scene.render.image_settings
+        if image_settings.file_format in ('OPEN_EXR', 'OPEN_EXR_MULTILAYER'):
+            preset_values += [
+                            'render.image_settings.exr_codec', 
+                            'render.image_settings.use_zbuffer',
+                            'render.image_settings.use_preview'
+                            ]
+        if image_settings.file_format in ('TIFF'):
+            preset_values += ['render.image_settings.tiff_codec']
+        
+        if image_settings.file_format in ('JPEG'):
+            preset_values += ['render.image_settings.quality']
+        
+        # Engine Settings
+        if scene.render.engine == 'CYCLES':
+            for prop in dir(scene.cycles):
+                if not prop.startswith(ignore_attribs):
+                    preset_values.append("scene.cycles.{}".format(prop))
+                    
+        if bpy.context.scene.render.engine == 'BLENDER_EEVEE':
+            for prop in dir(scene.eevee):
+                if not prop.startswith(ignore_attribs):
+                    preset_values.append("scene.eevee.{}".format(prop))
+        
+        if scene.render.engine == 'BLENDER_WORKBENCH':
+            for prop in dir(scene.display.shading):
+                if not prop.startswith(ignore_attribs + ("selected_studio_light","cycles",)):
+                    preset_values.append("scene.display.shading.{}".format(prop))
+            for prop in dir(scene.display):
+                if not prop.startswith(ignore_attribs + ("shading",)):
+                    preset_values.append("scene.display.{}".format(prop))
+
+
+class LOOM_MT_RenderPresets(bpy.types.Menu): 
+    bl_label = 'Loom Render Presets' 
+    preset_subdir = 'loom/rndr_presets'
+    preset_operator = 'script.execute_preset'
+    draw = bpy.types.Menu.draw_preset
+    
+
+class LOOM_PT_RenderPresets(PresetPanel, bpy.types.Panel):
+    bl_label = 'Loom Render Presets'
+    preset_subdir = 'loom/rndr_presets'
+    preset_operator = 'script.execute_preset'
+    preset_add_operator = 'loom.render_preset'
+    #def draw(self, context): pass
+
+
 class LOOM_MT_render_menu(bpy.types.Menu):
     bl_label = "Loom"
     bl_idname = "LOOM_MT_render_menu"
@@ -5021,6 +5169,17 @@ def draw_loom_dopesheet(self, context):
         row.popover(panel="LOOM_PT_dopesheet", text="", icon='SEQUENCE')
 
 
+def draw_loom_render_presets(self, context):
+    layout = self.layout
+    layout.emboss = 'NONE'
+    row = layout.row(align=True)
+    #row.menu(LOOM_MT_RenderPresets.__name__, text=LOOM_MT_RenderPresets.bl_label)
+    #row.operator(OT_AddMyPreset.bl_idname, text="", icon='ADD')
+    #row.operator(OT_AddMyPreset.bl_idname, text="", icon='REMOVE').remove_active = True
+    #row.label(text="Render Presets")
+    row.popover(panel=LOOM_PT_RenderPresets.__name__, text="", icon='PRESET')
+
+
 # -------------------------------------------------------------------
 #    Registration & Shortcuts
 # -------------------------------------------------------------------
@@ -5113,6 +5272,9 @@ classes = (
     LOOM_OT_project_dialog,
     LOOM_OT_bake_globals,
     LOOM_OT_utils_framerange,
+    LOOM_OT_RenderPreset,
+    LOOM_MT_RenderPresets,
+    LOOM_PT_RenderPresets,
     LOOM_MT_render_menu,
     LOOM_MT_marker_menu,
     LOOM_PT_dopesheet
@@ -5204,6 +5366,7 @@ def register():
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_compositor_paths)
     bpy.types.DOPESHEET_HT_header.append(draw_loom_dopesheet)
+    bpy.types.PROPERTIES_HT_header.append(draw_loom_render_presets)
     if bpy.app.version >= (3, 0, 0):
         bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
     else:
@@ -5219,6 +5382,7 @@ def unregister():
     bpy.types.DOPESHEET_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     bpy.types.TOPBAR_MT_render.remove(draw_loom_render_menu)
+    bpy.types.PROPERTIES_HT_header.remove(draw_loom_render_presets)
     if bpy.app.version >= (3, 0, 0):
         bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
     else:
