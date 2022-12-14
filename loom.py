@@ -802,14 +802,44 @@ class LOOM_PG_batch_render(bpy.types.PropertyGroup):
 
 
 class LOOM_PG_preset_flags(bpy.types.PropertyGroup):
-    include_resolution: bpy.props.BoolProperty(name="Resolution")
-    include_output_path: bpy.props.BoolProperty(name="Output Path")
-    include_file_format: bpy.props.BoolProperty(name="File Format")
-    include_scene_settings: bpy.props.BoolProperty(name="Scene Settings")
-    include_passes: bpy.props.BoolProperty(name="Passes")
-    include_color_management: bpy.props.BoolProperty(name="Color Management")
-    include_metadata: bpy.props.BoolProperty(name="Metadata")
-    include_post_processing: bpy.props.BoolProperty(name="Post Processing")
+
+    include_engine_settings: bpy.props.BoolProperty(
+        name="Engine Settings", # Currently not exposed to the user
+        description="Store 'Render Engine' settings",
+        default=True)
+
+    include_resolution: bpy.props.BoolProperty(
+        name="Resolution",
+        description="Store current 'Format' settings")
+
+    include_output_path: bpy.props.BoolProperty(
+        name="Output Path",
+        description="Store current 'Output Path'")
+    
+    include_file_format: bpy.props.BoolProperty(
+        name="File Format",
+        description="Store current 'File Format' settings")
+    
+    include_scene_settings: bpy.props.BoolProperty(
+        name="Scene Settings", 
+        description="Store current 'Scene' settings")
+
+    include_passes: bpy.props.BoolProperty(
+        name="Passes",
+        description="Store current 'Passes' settings")
+
+    include_color_management: bpy.props.BoolProperty(
+        name="Color Management",
+        description="Store current 'Color Management' settings")
+    
+    include_metadata: bpy.props.BoolProperty(
+        name="Metadata",
+        description="Store current 'Metadata' settings")
+
+    include_post_processing: bpy.props.BoolProperty(
+        name="Post Processing", # Currently not exposed to the user
+        description="Store current 'Post Processing' settings",
+        default=True)
 
 
 class LOOM_PG_slots(bpy.types.PropertyGroup):
@@ -5038,23 +5068,24 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
                 preset_values += ['render.image_settings.quality']
         
         """ Engine Settings """
-        if scene.render.engine == 'CYCLES':
-            for prop in dir(scene.cycles):
-                if not prop.startswith(ignore_attribs):
-                    preset_values.append("scene.cycles.{}".format(prop))
-                    
-        if bpy.context.scene.render.engine == 'BLENDER_EEVEE':
-            for prop in dir(scene.eevee):
-                if not prop.startswith(ignore_attribs + ("gi_cache_info",)):
-                    preset_values.append("scene.eevee.{}".format(prop))
-        
-        if scene.render.engine == 'BLENDER_WORKBENCH':
-            for prop in dir(scene.display.shading):
-                if not prop.startswith(ignore_attribs + ("selected_studio_light","cycles",)):
-                    preset_values.append("scene.display.shading.{}".format(prop))
-            for prop in dir(scene.display):
-                if not prop.startswith(ignore_attribs + ("shading",)):
-                    preset_values.append("scene.display.{}".format(prop))
+        if preset_flags.include_engine_settings:
+            if scene.render.engine == 'CYCLES':
+                for prop in dir(scene.cycles):
+                    if not prop.startswith(ignore_attribs):
+                        preset_values.append("scene.cycles.{}".format(prop))
+                        
+            if bpy.context.scene.render.engine == 'BLENDER_EEVEE':
+                for prop in dir(scene.eevee):
+                    if not prop.startswith(ignore_attribs + ("gi_cache_info",)):
+                        preset_values.append("scene.eevee.{}".format(prop))
+            
+            if scene.render.engine == 'BLENDER_WORKBENCH':
+                for prop in dir(scene.display.shading):
+                    if not prop.startswith(ignore_attribs + ("selected_studio_light","cycles",)):
+                        preset_values.append("scene.display.shading.{}".format(prop))
+                for prop in dir(scene.display):
+                    if not prop.startswith(ignore_attribs + ("shading",)):
+                        preset_values.append("scene.display.{}".format(prop))
 
         return preset_values
 
@@ -5081,7 +5112,10 @@ def draw_loom_preset_flags(self, context):
     layout.use_property_decorate = False
     layout.separator(factor=0.5)
     layout.emboss='NORMAL'
-    col = layout.column(heading="Include:")
+    col = layout.column(heading="Also include:")
+    #act = col.column()
+    #act.prop(preset_flags, "include_engine_settings")
+    #act.enabled = False
     col.prop(preset_flags, "include_resolution")
     col.prop(preset_flags, "include_file_format")
     col.prop(preset_flags, "include_output_path")
@@ -5089,7 +5123,7 @@ def draw_loom_preset_flags(self, context):
     col.prop(preset_flags, "include_passes")
     col.prop(preset_flags, "include_color_management")
     col.prop(preset_flags, "include_metadata")
-    col.prop(preset_flags, "include_post_processing")
+    #col.prop(preset_flags, "include_post_processing")
     layout.separator(factor=0.3)
 
 def draw_loom_preset_header(self, context):
