@@ -137,6 +137,17 @@ Defaults for demo purposes: `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$VIE
 
 <!-- <img width="736" alt="Globals" src="https://user-images.githubusercontent.com/512368/180612932-93a1882c-06f3-4016-a2f7-13fa61c78dce.png"> -->
 
+### Render Presets
+
+Loom allows to store all necessary render settings. You can set the engine, samples, output path, image properties, etc. and save all settings as a new custom 'preset' in the *Header* of the *Properties Area*.
+
+<img width="534" alt="Screenshot 2022-12-11 at 18 36 42" src="https://user-images.githubusercontent.com/512368/206920653-6de7400f-f9b0-4382-bce5-085415534c2d.png">
+
+If a preset exists, a new dropdown will appear in the 'Image Sequence Dialog' when 'Render using Command Line' is turned on which also allows to render the current scene using your custom presets, regardless of the actual render settings:
+
+<img width="521" alt="Screenshot 2022-12-11 at 18 38 19" src="https://user-images.githubusercontent.com/512368/206921276-28bb5bc0-64ba-4bcd-8e65-4b9963e52bf2.png">
+
+
 ### Markers
 
 Loom adds three new operators to the *Marker* menu of the *Timeline (Timeline > Markers)*. You can **generate markers based on the selected cameras** in the viewport, **unbind the markers** from the cameras or just **batch rename** them using a custom name or *Globals* that are defined in the *Addon Preferences*.
