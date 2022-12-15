@@ -85,8 +85,8 @@ If [FFmpeg](https://www.ffmpeg.org/) is installed on your machine and set up pro
 ### Options
  - Select `ProRes 4444 XQ` to get an **alpha channel**
  - You can **verify the image sequence** on disk before encoding by clicking the *Verify Image Sequence* operator ![I1](https://i.stack.imgur.com/JovW0.jpg), which also detects all frames missing frames of the sequence
- - In case there are **missing frames**, the addon either provides an utility function to fill the gaps of the image sequence with copies of the nearest frame to get the full lenght animation and another operator to render all missing frames (make sure *Verfify Sequence* is enabled when selecting a frame in the file browser <kbd>N</kbd>)
- 
+ - In case there are **missing frames**, the addon either provides an utility function to fill the gaps of the image sequence with copies of the previous (nearest) frame to get the full lenght animation and another operator to render all missing frames. If you just want to fill the gaps of the given sequence, enable the *Ignore Scene Range* property <img width="18" alt="Screenshot 2022-12-15 at 08 32 33" src="https://user-images.githubusercontent.com/512368/207799961-29fb9796-941b-48dd-8ea0-e5c22a94e1e9.png">
+
    <!-- ![Encode Image Sequence Dialog](https://i.stack.imgur.com/ul9ld.jpg) -->
 
 
