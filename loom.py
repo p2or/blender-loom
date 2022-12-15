@@ -2734,7 +2734,7 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
             row.prop(lum, "ignore_scene_range", text="", icon='RENDER_RESULT')
             fg = row.operator(LOOM_OT_fill_sequence_gaps.bl_idname, text="Fill Gaps with Copies")
             fg.sequence_path = lum.sequence_encode
-            fg.scene_range = lum.ignore_scene_range
+            fg.scene_range = not lum.ignore_scene_range
             txt = "Render Missing Frames"
             di = spl.operator(LOOM_OT_render_input_dialog.bl_idname, icon='RENDER_STILL', text=txt)
             di.frame_input = lum.lost_frames
@@ -3357,14 +3357,13 @@ class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
             self.report({'WARNING'},"No valid image sequence")
             return {"CANCELLED"}
 
-        """ Detect missing frames """
+        """ Assemble missing frames """
         frame_numbers = sorted(list(image_sequence.keys())) 
         #start_frame, end_frame = fn[0], fn[-1]
         missing_frame_list = self.missing_frames(frame_numbers)
+        frames_to_copy = {}
 
-        """ Copy images """
         if missing_frame_list:
-            frames_to_copy = {}
             f_prev = frame_numbers[0]
             for frame in range(frame_numbers[0], frame_numbers[-1]+1):
                 if frame not in image_sequence:
@@ -3373,16 +3372,18 @@ class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
                 else:
                     f_prev = frame
 
-            """ Extend to frame range of the scene """
-            if self.scene_range:
-                for i in range(context.scene.frame_start, frame_numbers[0]):
-                    path_copy = self.re_path(basedir, name_real, i, hashes, ext)
-                    frames_to_copy.setdefault(image_sequence[frame_numbers[0]], []).append(path_copy)
-                
-                for o in range(frame_numbers[-1]+1, context.scene.frame_end+1):
-                    path_copy = self.re_path(basedir, name_real, o, hashes, ext)
-                    frames_to_copy.setdefault(image_sequence[frame_numbers[-1]], []).append(path_copy)
-
+        """ Extend to frame range of the scene """
+        if self.scene_range:
+            for i in range(context.scene.frame_start, frame_numbers[0]):
+                path_copy = self.re_path(basedir, name_real, i, hashes, ext)
+                frames_to_copy.setdefault(image_sequence[frame_numbers[0]], []).append(path_copy)
+            
+            for o in range(frame_numbers[-1]+1, context.scene.frame_end+1):
+                path_copy = self.re_path(basedir, name_real, o, hashes, ext)
+                frames_to_copy.setdefault(image_sequence[frame_numbers[-1]], []).append(path_copy)
+        
+        """ Copy the Images """
+        if frames_to_copy:
             try:
                 from shutil import copyfile
                 for src, dest in frames_to_copy.items():
@@ -3393,9 +3394,8 @@ class LOOM_OT_fill_sequence_gaps(bpy.types.Operator):
                 lum.lost_frames = ""
             except OSError:
                 self.report({'ERROR'}, "Error while trying to copy frames")
-
         else:
-            self.report({'INFO'},"Nothing to do")
+            self.report({'INFO'},"No Gaps, nothing to do")
         return {'FINISHED'}
 
     def invoke(self, context, event):
