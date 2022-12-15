@@ -5246,14 +5246,17 @@ def draw_loom_outputpath(self, context):
     layout = self.layout
     box = layout.box()
     row = box.row()
-    
+
     if not os.path.isdir(output_folder): #if globals_flag
         row.operator(LOOM_OT_utils_create_directory.bl_idname, 
             icon='ERROR', text="", emboss=False).directory = os.path.dirname(file_path)
     else:
         row.operator(LOOM_OT_open_output_folder.bl_idname, icon='DISK_DRIVE', text="", emboss=False)
 
-    row.label(text="{}".format(file_path if not scn.loom.is_rendering else scn.render.filepath))
+    if scn.render.is_movie_format:
+        row.label(text="Video file formats are not supported by Loom")
+    else:
+        row.label(text="{}".format(file_path if not scn.loom.is_rendering else scn.render.filepath))
 
     if globals_flag or context.scene.loom.path_collection:
         sub_row = row.row(align=True)
