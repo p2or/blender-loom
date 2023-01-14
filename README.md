@@ -141,11 +141,17 @@ Defaults for demo purposes: `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$VIE
 
 Loom allows to store all necessary render settings. You can set the engine, samples, output path, image properties, etc. and save all settings as a new custom 'preset' in the *Header* of the *Properties Area*.
 
-<img width="534" alt="Screenshot 2022-12-11 at 18 36 42" src="https://user-images.githubusercontent.com/512368/206920653-6de7400f-f9b0-4382-bce5-085415534c2d.png">
+<!--<img width="700" alt="Screenshot 2022-12-11 at 18 36 42" src="https://user-images.githubusercontent.com/512368/206920653-6de7400f-f9b0-4382-bce5-085415534c2d.png">-->
 
-If a preset exists, a new dropdown will appear in the 'Image Sequence Dialog' when 'Render using Command Line' is turned on which also allows to render the current scene using your custom presets, regardless of the actual render settings:
+<img width="700" alt="Screenshot 2023-01-14 at 14 04 22" src="https://user-images.githubusercontent.com/512368/212472944-9fcdb914-2d21-480d-bc98-9d3100cb11f0.png">
 
-<img width="521" alt="Screenshot 2022-12-11 at 18 38 19" src="https://user-images.githubusercontent.com/512368/206921276-28bb5bc0-64ba-4bcd-8e65-4b9963e52bf2.png">
+
+If a preset exists, a new dropdown will appear in the 'Image Sequence Dialog' when 'Render using Command Line' is turned as well as in the 'Batch Dialog' if 'Override Render Settings' is enabled which also allows to render the current scene or file using your custom presets, regardless of the actual render settings:
+
+<!-- <img width="521" alt="Screenshot 2022-12-11 at 18 38 19" src="https://user-images.githubusercontent.com/512368/206921276-28bb5bc0-64ba-4bcd-8e65-4b9963e52bf2.png"> -->
+
+<img width="700" alt="rndr_presets_dropdown" src="https://user-images.githubusercontent.com/512368/212472717-63c19b49-4e6d-4898-ba16-33777a397105.png">
+
 
 
 ### Markers
