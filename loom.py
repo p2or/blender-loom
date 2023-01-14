@@ -1786,11 +1786,21 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         coll_len = len(cli_arg_dict)
         for c, item in enumerate(lum.batch_render_coll):
             if item.encode_flag and item.name not in black_list:
+                # bpy.context.scene.loom.render_collection[-1]['file_path'];
+                # seq_path=bpy.context.scene.render.frame_path(frame=1);
                 python_expr = ("import bpy;" +\
-                            "seq_path=bpy.context.scene.render.frame_path(frame=1);" +\
-                            #"seq_path=bpy.context.scene.render.filepath;" +\
+                            "ext=bpy.context.scene.render.file_extension;" +\
+                            "seq_path=bpy.context.scene.render.filepath+ext;" +\
                             "bpy.ops.loom.encode_dialog(" +\
-                            "sequence=seq_path, terminal_instance=False, pause=False)")
+                            "sequence=seq_path," +\
+                            "fps={fps}," +\
+                            "codec='{cdc}'," +\
+                            "colorspace='{cls}'," +\
+                            "terminal_instance=False," +\
+                            "pause=False)").format(
+                                fps = self.fps,
+                                cdc = self.codec,
+                                cls = self.colorspace)
 
                 cli_args = [bl_bin, "-b", item.path, "--python-expr", python_expr]
                 cli_arg_dict[c+coll_len] = cli_args
@@ -2552,17 +2562,18 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
                 self.report({'ERROR'},error_message)
                 bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
                 return {"CANCELLED"}
-
-        #if not self.properties.is_property_set("sequence"): # call via commandline?
+            
+        #if not self.properties.is_property_set("sequence"): 
         seq_path = lum.sequence_encode if not self.sequence else self.sequence
         mov_path = lum.movie_path if not self.movie else self.movie
 
+        # Called via UI
         path_error = False
         if not seq_path:
             self.report({'ERROR'}, "No image sequence specified")
             path_error = True
 
-        if path_error:
+        if path_error and self.options.is_invoke:
             bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
@@ -2570,6 +2581,14 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         basedir, filename = os.path.split(seq_path)
         basedir = os.path.realpath(bpy.path.abspath(basedir))
         filename_noext, extension = os.path.splitext(filename)
+
+        # Support for non-sequence paths when called via commandline
+        if not self.options.is_invoke:
+            filename_noext = replace_globals(filename_noext)
+            if '#' not in filename_noext:
+                filename_noext += "####"
+            if not extension:
+                extension += context.scene.render.file_extension
 
         seq_error = False
         if '#' not in filename_noext:
@@ -2584,7 +2603,7 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
             self.report({'ERROR'}, "File format not set (missing extension)")
             seq_error = True
 
-        if seq_error:
+        if seq_error and self.options.is_invoke:
             bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
@@ -2599,7 +2618,8 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
 
         if not len(image_sequence) > 1:
             self.report({'ERROR'},"'{}' cannot be found on disk".format(filename))
-            bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
+            if self.options.is_invoke:
+                bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
         if not mov_path:
@@ -3291,16 +3311,16 @@ class LOOM_OT_encode_auto_paths(bpy.types.Operator):
 
         if lum.render_collection and not self.default_path:
             latest_frame = lum.render_collection[-1]
-            basedir = latest_frame.file_path # Absolute or Relative?
+            basedir = os.path.dirname(bpy.path.abspath(replace_globals(latest_frame.file_path))) # Absolute or Relative?
             num_suff = "0".zfill(latest_frame.padded_zeros)
-            filename_noext = latest_frame.name + num_suff
+            filename_noext = replace_globals(latest_frame.name) + num_suff
             ext = ".{}".format(latest_frame.image_format)
             report_msg = "Sequence path set based on latest Loom render"
         
         if not lum.movie_path:
             movie_noext = filename_noext.replace(num_suff, "")
             movie_noext = movie_noext[:-1] if movie_noext.endswith(("-", "_", ".")) else movie_noext
-            lum.movie_path = "{}.mov".format(os.path.join(basedir, movie_noext))
+            lum.movie_path = "{}.mov".format(bpy.path.abspath(os.path.join(basedir, movie_noext)))
 
         filename_noext = filename_noext.replace(num_suff, "#"*len(num_suff))
         sequence_name = "{}{}".format(filename_noext, ext)
@@ -3722,7 +3742,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 name_real = re.sub("#", '', name_real)
                 self.digits = len(hashes[0])
             return name_real + "_" if name_real and name_real[-1].isdigit() else name_real
-
+        
         else: # If filename not specified, use blend-file name instead
             blend_name, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
             return blend_name + "_"
