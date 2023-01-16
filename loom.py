@@ -1999,7 +1999,7 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
                     #last_number, last_path = list(fs.items())[-1] # Python 3.8+
                     fcopy = os.path.join(basedir, "{}{}".format(nextf, ext))
         else:
-            ft = strftime('%Y-%m-%d-%H-%M-%S')
+            ft = strftime("%Y-%m-%d-%H-%M-%S")
             if self.suffix == 'DATE' and self.options.is_invoke:
                 fcopy = os.path.join(basedir, "{}{}".format(ft, ext))
             else:
@@ -2624,15 +2624,21 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
 
         if not mov_path:
             mov_path = next(iter(image_sequence.values()))
+            #mov_filename_noext = os.path.basename(basedir)
 
         """ Verify movie file name and extension """
         mov_basedir, mov_filename = os.path.split(mov_path)
         mov_filename_noext, mov_extension = os.path.splitext(mov_filename)
         mov_extension = ".mov"
 
+        # In case the sequence has no name
+        if mov_filename_noext.isdigit():
+            mov_filename_noext = os.path.basename(basedir)
+        
+        # In case the file exists already
         mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
         if os.path.isfile(mov_path):
-            time_stamp = strftime("_%Y%m%d-%H%M%S")
+            time_stamp = strftime("%Y-%m-%d-%H-%M-%S")
             mov_filename_noext = "{}{}".format(mov_filename_noext, time_stamp)
         
         mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
@@ -2662,7 +2668,6 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
         fp_ffmpeg = os.path.join(basedir, fn_ffmpeg) # "{}%0{}d{}".format(filename_noext, 4, ext)
         cli_args = ["-start_number", frame_numbers[0], "-apply_trc", self.colorspace, "-i", fp_ffmpeg] 
         cli_args += self.encode_presets[self.codec]
-        #cli_args += ["-f", "image2"]
         cli_args += [mov_path] if self.fps == 25 else ["-r", self.fps, mov_path]
 
         # TODO - PNG support
