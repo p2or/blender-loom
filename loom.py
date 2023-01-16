@@ -2563,11 +2563,11 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
                 bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
                 return {"CANCELLED"}
             
-        #if not self.properties.is_property_set("sequence"): 
+        #if not self.properties.is_property_set("sequence"):
         seq_path = lum.sequence_encode if not self.sequence else self.sequence
         mov_path = lum.movie_path if not self.movie else self.movie
 
-        # Called via UI
+        """ Operator called via UI """
         path_error = False
         if not seq_path:
             self.report({'ERROR'}, "No image sequence specified")
@@ -2577,12 +2577,15 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
             bpy.ops.loom.encode_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
 
-        """ Verify image sequence """
         basedir, filename = os.path.split(seq_path)
         basedir = os.path.realpath(bpy.path.abspath(basedir))
         filename_noext, extension = os.path.splitext(filename)
 
-        # Support for non-sequence paths when called via commandline
+        if not os.path.isdir(basedir):
+            self.report({'ERROR'},"The main directory '{}' does not exist".format(basedir))
+            return {"CANCELLED"}
+
+        """ Support for non-sequence paths when called via Command Line """
         if not self.options.is_invoke:
             filename_noext = replace_globals(filename_noext)
             if '#' not in filename_noext:
@@ -2590,6 +2593,7 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
             if not extension:
                 extension += context.scene.render.file_extension
 
+        """ Verify image sequence """
         seq_error = False
         if '#' not in filename_noext:
             num_suff = self.number_suffix(filename_noext)
@@ -2624,22 +2628,21 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
 
         if not mov_path:
             mov_path = next(iter(image_sequence.values()))
-            #mov_filename_noext = os.path.basename(basedir)
 
         """ Verify movie file name and extension """
         mov_basedir, mov_filename = os.path.split(mov_path)
         mov_filename_noext, mov_extension = os.path.splitext(mov_filename)
         mov_extension = ".mov"
 
-        # In case the sequence has no name
+        """ In case the sequence has no name """
         if mov_filename_noext.isdigit():
             mov_filename_noext = os.path.basename(basedir)
         
-        # In case the file exists already
+        """ If a file with the same name already exists, do not overwrite it """
         mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
         if os.path.isfile(mov_path):
             time_stamp = strftime("%Y-%m-%d-%H-%M-%S")
-            mov_filename_noext = "{}{}".format(mov_filename_noext, time_stamp)
+            mov_filename_noext = "{}_{}".format(mov_filename_noext, time_stamp)
         
         mov_path = os.path.join(mov_basedir, "{}{}".format(mov_filename_noext, mov_extension))
 
