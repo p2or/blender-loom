@@ -5,7 +5,7 @@ Loom is a blender addon designed to simplify the process of rendering *image seq
 ### Table of Contents
 
 - [Render Image Sequence Dialog](#render-image-sequence-dialog-ctrlshiftf12)
-- [Loom Batch Dialog](#loom-batch-dialog-ctrlshiftaltf12)
+- [Batch Render Dialog](#batch-render-dialog-ctrlshiftaltf12)
 - [Encode Image Sequence Dialog](#encode-image-sequence-dialog-ctrlshiftf9)
 - [Utilities](#utilities)
 - [Gotchas and Limitations](#gotchas-and-limitations)
@@ -57,7 +57,7 @@ You can also render **every nth frame** of the scene by adding `x` followed by a
  - When you click the stopwatch ![stopwatch_small](https://user-images.githubusercontent.com/512368/182232254-882c38c5-6b77-46dc-8485-79697cabc02f.jpg), Loom tries to find out **which frames are missing** based on the regular *Output Path* and automatically adds them to the list. If you hold down <kbd>Ctrl</kbd> or <kbd>Cmd</kbd> while clicking the button, the regular frame range of the timeline is forced to be taken.
  - You can enable *Filtering* ![I1](https://i.stack.imgur.com/lKqJq.jpg) to handle each number after the caret (`^`) separatly, this allows to **add single frames** or frame ranges **right after any excluded frame**, e.g. `1-10 23 ^3-7 4 6` renders `1, 2, 4, 6, 8, 9, 10, 23` instead of `1, 2, 8, 9, 10, 23` if the property is disabled.
 
-## Loom Batch Dialog <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Alt</kbd><kbd>F12</kbd>
+## Batch Render Dialog <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Alt</kbd><kbd>F12</kbd>
 
 The batch dialog allows to *render multiple .blend files* and *encoding their output sequences* by using the command line in one go. You can either scan any directory or add the .blend files manually, re-order them and specify the render range or single frames for each file similar to the *Render Image Sequence Dialog*.
 
@@ -139,14 +139,14 @@ Defaults for demo purposes: `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$VIE
 
 ### Render Presets
 
-Loom allows to store all necessary render settings. You can set the engine, samples, output path, image properties, etc. and save all settings as a new custom 'preset' in the *Header* of the *Properties Area*.
+Loom allows to store custom presets for all necessary render properties. You can set the engine, samples, output path, image properties, etc. and save all settings as a new custom 'preset' in the *Header* of the *Properties Area* for reuse.
 
 <!--<img width="700" alt="Screenshot 2022-12-11 at 18 36 42" src="https://user-images.githubusercontent.com/512368/206920653-6de7400f-f9b0-4382-bce5-085415534c2d.png">-->
 
 <img width="700" alt="Screenshot 2023-01-14 at 14 04 22" src="https://user-images.githubusercontent.com/512368/212472944-9fcdb914-2d21-480d-bc98-9d3100cb11f0.png">
 
 
-If a preset exists, a new dropdown will appear in the 'Image Sequence Dialog' when 'Render using Command Line' is turned as well as in the 'Batch Dialog' if 'Override Render Settings' is enabled which also allows to render the current scene or file using your custom presets, regardless of the actual render settings:
+If a preset exists, a new dropdown will appear in the 'Image Sequence Dialog' when 'Render using Command Line' is turned on as well as in the 'Batch Dialog' if 'Override Render Settings' is enabled which also allows to render the current scene or file using your custom presets, regardless of the actual render settings:
 
 <!-- <img width="521" alt="Screenshot 2022-12-11 at 18 38 19" src="https://user-images.githubusercontent.com/512368/206921276-28bb5bc0-64ba-4bcd-8e65-4b9963e52bf2.png"> -->
 
