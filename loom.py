@@ -3798,10 +3798,13 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 k.base_path = os.path.join(replace_globals(v["Folder"]), of)
 
     def start_render(self, scene, frame, silent=False):
-        rndr = scene.render # Skip frame, if rendered already
+        rndr = scene.render
         if not rndr.use_overwrite and os.path.isfile(rndr.filepath):
             self._skipped_frames.append(frame)
-            self.post_render(scene, None)
+            if not silent:
+                self.post_render(scene, None)
+            else:
+                print("Skipped frame: {} (already exists)".format(frame))
         else:
             if silent:
                 bpy.ops.render.render(write_still=True)
@@ -3844,7 +3847,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                     mf=i[0], sf=str(i[1]).split(".")[1]) for i in self._skipped_frames)
             else:
                 skipped = ','.join(map(str, self._skipped_frames))
-            self.report({'WARNING'}, "{} skipped (would overwrite existing file(s))".format(skipped))
+            self.report({'WARNING'}, "Frame(s): {} skipped (would overwrite existing file(s))".format(skipped))
 
     def execute(self, context):
         scn = context.scene
@@ -3906,7 +3909,6 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         
         """ Render silent """
         if self.render_silent:
-
             """ Apply custom Render Preset """
             if self.render_preset and self.render_preset != "EMPTY":
                 bpy.ops.script.execute_preset(
@@ -3918,6 +3920,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 self.start_render(scn, frame_number, silent=True)
 
             """ Reset output path & display results """
+            self.final_report()
             self.reset_output_paths(scn)
             return {"FINISHED"}
 
