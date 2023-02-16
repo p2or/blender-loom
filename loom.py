@@ -3748,7 +3748,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             if "#" in name_real:
                 hashes = re.findall("#+$", name_real)
                 name_real = re.sub("#", '', name_real)
-                self.digits = len(hashes[0])
+                self.digits = len(hashes[0]) if hashes else 4
             return name_real + "_" if name_real and name_real[-1].isdigit() else name_real
         
         else: # If filename not specified, use blend-file name instead
@@ -5252,11 +5252,10 @@ def draw_loom_outputpath(self, context):
         file_name = blend_name + "_" # What about a dot?
 
     if not file_name.count('#'): # and not scn.loom.is_rendering:
-        # A tiny detail when rendering, might be expensive
-        # num_tail = re.split('[^\d]', file_name)[-1], file_name[-1].isdigit():
-        #if not next(reversed(([x for x in re.findall(r'\d+\b', file_name)])), None):
         if not bool(re.search(r'\d+\.[a-zA-Z0-9]{3,4}\b', file_name)):
             file_name = "{}{}".format(file_name, "#"*4)
+    else:
+        file_name = re.sub(r"(?!#+$|#+\.[a-zA-Z0-9]{3,4}\b)#+", '', file_name)
     
     globals_flag = False
     if any(ext in file_name for ext in glob_vars.keys()):
