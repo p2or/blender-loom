@@ -486,7 +486,7 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         subtype = "FILE_PATH",
         default = bpy.utils.user_resource(
             'SCRIPTS',
-            path=os.path.join("presets", "loom/render_presets")))
+            path=os.path.join("presets", "loom", "render_presets")))
 
     def draw_state(self, prop):
         return 'RADIOBUT_OFF' if not prop else 'RADIOBUT_ON'
