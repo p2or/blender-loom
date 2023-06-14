@@ -2675,8 +2675,8 @@ class LOOM_OT_encode_dialog(bpy.types.Operator):
 
         # TODO - PNG support
         if extension in (".png", ".PNG"):
-            self.report({'WARNING'}, "PNG is not supported")
-            return {"FINISHED"}
+            self.report({'WARNING'}, "Loom does not support png sequences, no guarantee that the output is correct.")
+            #return {"FINISHED"}
 
         """ Run ffmpeg """
         bpy.ops.loom.run_terminal(
