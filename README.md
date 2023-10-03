@@ -67,7 +67,8 @@ The batch dialog allows to *render multiple .blend files* and *encoding their ou
 
 ### Notes
 
- - Encoding takes place **after the rendering** (path tracing) is done
+ - Encoding <img width="22" alt="encoding-flag-disabled" src="https://github.com/p2or/blender-loom/assets/512368/645d1594-f20b-4f82-b1ee-c13761d812b7"> is optional and 
+ takes place **after the rendering** (path tracing / rasterization) is done
  - Execution of that operator generates a **batch file** in blender's scripts directory (`.sh` or `.bat` depending on the operating system) and runs all commands via command line one by another - you can make the generated batch files your own and modify them (for easy access, click the *disk icon* right beside *Delete temporary batch file* operator in the *Addon Preferences*, to open up blender's scripts directory on your system)
   - In case you need **more space** within the dialog itself or e.g. you'd like to see the **path of each file**, you can change the appearance of the elements within the dialog by clicking the arrow in the upper right corner to change the display settings
 
