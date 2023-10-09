@@ -277,16 +277,6 @@ def user_globals(context):
     return False
 
 
-def verify_app(cmd):
-    """Verify whether an external app is callable"""
-    try:
-        subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except OSError as e:
-        if e.errno == errno.ENOENT:
-            return False
-    return True
-
-
 # -------------------------------------------------------------------
 #    Preferences & Scene Properties
 # -------------------------------------------------------------------
@@ -4200,9 +4190,12 @@ class LOOM_OT_verify_terminal(bpy.types.Operator):
                 prefs.terminal = 'xterm'
             else:
                 self.report({'INFO'}, "Terminal not supported.")
+        
+        if prefs.terminal:
+            bpy.ops.wm.save_userpref()
 
         self.report({'INFO'}, "Terminal is '{}'".format(prefs.terminal))
-        #bpy.ops.wm.save_userpref()
+
         return {'FINISHED'}
 
 
