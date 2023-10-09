@@ -38,7 +38,7 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 9, 0),
+    "version": (0, 9, 1),
     "blender": (2, 82, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
@@ -760,11 +760,13 @@ class LOOM_OT_directories_ui(bpy.types.Operator):
 
 def render_preset_callback(scene, context):
     items = [('EMPTY', "Current Render Settings", "")]
-    for f in os.listdir(context.preferences.addons[__name__].preferences.render_presets_path):
-         if not f.startswith(".") and f.endswith(".py"):
-             fn, ext = os.path.splitext(f)
-             #d = bpy.path.display_name(os.path.join(rndr_presets_path, f))
-             items.append((f, "'{}' Render Preset".format(fn), ""))
+    preset_path = context.preferences.addons[__name__].preferences.render_presets_path
+    if os.path.exists(preset_path):
+        for f in os.listdir(preset_path):
+            if not f.startswith(".") and f.endswith(".py"):
+                fn, ext = os.path.splitext(f)
+                #d = bpy.path.display_name(os.path.join(rndr_presets_path, f))
+                items.append((f, "'{}' Render Preset".format(fn), ""))
     return items
 
 
