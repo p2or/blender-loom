@@ -134,7 +134,7 @@ Loom allows to replace of all occurrences of any global variable defined in the 
 
 <img width="700" alt="Globals" src="https://user-images.githubusercontent.com/512368/180618964-b4d6ef0c-c542-4925-be40-3e6b65cb9172.gif">
 
-Defaults for demo purposes: `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$VIEWLAYER`, `$MARKER`, `$COLL` etc. 
+Defaults for demo purposes: `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$VIEWLAYER`, `$MARKER`, `$COLL` etc. To customize the time variables for e.g. dailies, see the official documentation on [`strftime()`](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) for all options.
 
 <!-- <img width="736" alt="Globals" src="https://user-images.githubusercontent.com/512368/180612932-93a1882c-06f3-4016-a2f7-13fa61c78dce.png"> -->
 
