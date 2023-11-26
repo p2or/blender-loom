@@ -5418,6 +5418,8 @@ global_var_defaults = {
     "$MARKER": 'next((i.name for i in bpy.context.scene.timeline_markers if i.frame == bpy.context.scene.frame_current), "NO_NAME")',
     "$COLL": 'bpy.context.collection.name',
     "$OB": 'bpy.context.active_object.name',
+    "$DAY": 'exec("import time") or time.strftime("%Y-%m-%d")',
+    "$TIME": 'exec("import time") or time.strftime("%H-%M-%S")',
     "$SUM": 'str(sum([8, 16, 32]))'
 }
 
