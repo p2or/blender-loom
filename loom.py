@@ -5805,7 +5805,6 @@ classes = (
     LOOM_OT_render_terminal,
     LOOM_OT_render_image_sequence,
     LOOM_OT_render_flipbook,
-    RENDER_OT_test,
     LOOM_OT_playblast,
     LOOM_OT_clear_dialog,
     LOOM_OT_verify_terminal,
