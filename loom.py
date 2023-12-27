@@ -1308,6 +1308,24 @@ class LOOM_OT_flipbook_dialog(bpy.types.Operator):
     bl_label = "Render Flipbook"
     bl_options = {'REGISTER', 'INTERNAL'}
 
+    keep_overlays: bpy.props.BoolProperty(
+        name="Keep Overlays",
+        description="Do not turn off overlays while rendering",
+        default=False,
+        options={'SKIP_SAVE'})
+
+    maximize_camera_bounds: bpy.props.BoolProperty(
+        name="Maximize Camera Bounds",
+        description="Center the camera and maximize its bounds to the viewport",
+        default=False,
+        options={'SKIP_SAVE'})
+
+    zoom_full: bpy.props.BoolProperty(
+        name="1:1 Camera Resolution",
+        description="Match the camera 1:1 to the render output",
+        default=False,
+        options={'SKIP_SAVE'})
+
     open_render_folder: bpy.props.BoolProperty(
         name="Open Render Folder",
         description="Open up the system folder when done",
@@ -1326,6 +1344,7 @@ class LOOM_OT_flipbook_dialog(bpy.types.Operator):
         lum = scn.loom
         filter_individual_numbers = lum.filter_input
         user_input = lum.frame_input
+        bpy.ops.wm.save_userpref()
 
         import io
         from contextlib import redirect_stdout, suppress
@@ -1335,9 +1354,13 @@ class LOOM_OT_flipbook_dialog(bpy.types.Operator):
         stdout = io.StringIO()
         with suppress(RuntimeError):
             with redirect_stdout(stdout):
-                bpy.ops.render.render_flipbook(
+                bpy.ops.render.image_sequence_opengl(
                     frames = user_input, 
-                    isolate_numbers = filter_individual_numbers)
+                    isolate_numbers = filter_individual_numbers,
+                    disable_overlays = not self.keep_overlays,
+                    maximize_camera_bounds = self.maximize_camera_bounds,
+                    zoom_full=self.zoom_full)
+        
         stdout.seek(0)
         output = stdout.read()
         
@@ -1391,14 +1414,39 @@ class LOOM_OT_flipbook_dialog(bpy.types.Operator):
         sub.operator(LOOM_OT_guess_frames.bl_idname, icon='PREVIEW_RANGE', text="")
         sub.prop(lum, "frame_input", text="")
         sub.prop(lum, "filter_input", icon='FILTER', icon_only=True)
-        sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="")
+        sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="")       
+
+        # current/bpy.types.PreferencesSystem.html#bpy.types.PreferencesSystem.viewport_aa
+        split = layout.split(factor=split_factor) # prop(pref_system, "viewport_aa")
+        split.label(text="Settings:")#Anti-Aliasing:
+        row = split.row(align=True)
+        row.prop(self, "keep_overlays", toggle=True, icon='OVERLAY', text="")
+        row.prop(context.preferences.system, "viewport_aa", text="")
+        #row.prop(context.preferences.system, "anisotropic_filter", text="")
+        #row = layout.row(align=True)
         
+        #row.prop(context.scene.display, "viewport_aa", text="")
+        """
+        split = layout.split(factor=split_factor) # prop(pref_system, "viewport_aa")
+        split.label(text="Camera:")
+        row = split.row(align=True)
+        row.prop(self, "zoom_full", toggle=True)
+        row.prop(self, "maximize_camera_bounds", toggle=True)
+        """
+        """
+        split = layout.split(factor=split_factor)
+        split.label(text="Settings:")
+        row = split.row() #align=True
+        row.prop(self, "keep_overlays", toggle=True, icon='OVERLAY')
+        """
         row = layout.row(align=True)    
         row.prop(self, "open_render_folder", text="Open render folder when done")
 
         hlp = row.operator(LOOM_OT_openURL.bl_idname, icon='HELP', text="", emboss=False)
         hlp.description = "Open Loom Documentation on Github"
         hlp.url = bl_info["doc_url"]
+
+        #row.prop(self, "keep_overlays", toggle=True, icon='OVERLAY', text="")
 
 
 class LOOM_OT_render_input_dialog(bpy.types.Operator):
@@ -4059,7 +4107,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
 class LOOM_OT_render_flipbook(bpy.types.Operator):
     """Render flipbook"""
-    bl_idname = "render.render_flipbook"
+    bl_idname = "render.image_sequence_opengl"
     bl_label = "Render Flipbook"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -4077,6 +4125,21 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
         description="Filter raw elements in frame input",
         default=False)
     
+    disable_overlays: bpy.props.BoolProperty(
+        name="Disable Overlays",
+        description="Disable all overlays while rendering",
+        default=True)
+
+    maximize_camera_bounds: bpy.props.BoolProperty(
+        name="Maximize Camera",
+        description="Center the camera and maximize its bounds to the viewport",
+        default=False)
+    
+    zoom_full: bpy.props.BoolProperty(
+        name="Zoom Camera",
+        description="Match the camera 1:1 to the render output",
+        default=False)
+
     _image_formats = {'BMP': 'bmp', 'IRIS': 'iris', 'PNG': 'png', 'JPEG': 'jpg', 
         'JPEG2000': 'jp2', 'TARGA': 'tga', 'TARGA_RAW': 'tga', 'CINEON': 'cin', 
         'DPX': 'dpx', 'OPEN_EXR_MULTILAYER': 'exr', 'OPEN_EXR': 'exr', 'HDR': 'hdr', 
@@ -4084,7 +4147,7 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
     
     _rendered_frames, _skipped_frames = [], []
     _frames = _dec = _log = _output_path = _folder = _filename = _extension = None
-    _subframe_flag = False
+    _subframe_flag = _overlays_state = _gizmos_state = False
 
     @classmethod
     def poll(cls, context):
@@ -4113,6 +4176,17 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
                     highest_shading_type = sh
                     area = v
         return area
+
+    def gizmos(self, area, state):
+        if area.type == 'VIEW_3D':
+            area.spaces[0].show_gizmo = state
+
+    def overlays(self, area, state):
+        if area.type == 'VIEW_3D':
+            area.spaces[0].overlay.show_overlays = state
+
+    def in_camera(self, area):
+        return area.spaces[0].region_3d.view_perspective == 'CAMERA'
 
     def file_extension(self, file_format):
         return self._image_formats[file_format]
@@ -4228,6 +4302,22 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
             self.report({'ERROR'}, "No viewport to render")
             return {'CANCELLED'}
 
+        """ Handle overlay states """
+        self._overlays_state = area.spaces[0].overlay.show_overlays
+        #self._gizmos_state = area.spaces[0].overlay.show_overlays
+
+        if self.disable_overlays:
+            self.overlays(area, False)
+
+        """ Optimizations """
+        if self.maximize_camera_bounds and self.in_camera(area):
+            with bpy.context.temp_override(area=area, region=area.regions[0]):
+                bpy.ops.view3d.view_center_camera()
+
+        if self.zoom_full and self.in_camera(area):
+            with bpy.context.temp_override(area=area, region=area.regions[0]):
+                bpy.ops.view3d.zoom_camera_1_to_1()
+
         """ Main output path """        
         self._output_path = scn.render.filepath
         output_folder, self._filename = os.path.split(bpy.path.abspath(self._output_path))
@@ -4270,8 +4360,9 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
             if f not in self._rendered_frames:
                 self._rendered_frames.append(f)
 
-        """ Reset output path & display results """
+        """ Reset output path and overlay states """
         wm.progress_end()
+        self.overlays(area, self._overlays_state)
         self.final_report()
         self.reset_output_path(scn)
         return {"FINISHED"}
