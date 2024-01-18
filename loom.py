@@ -5373,7 +5373,7 @@ def draw_loom_metadata(self, context):
     glob_vars = prefs.global_variable_coll
     scn = context.scene
 
-    if not scn.render.use_stamp_note or scn.render.is_movie_format:
+    if not scn.render.use_stamp_note: #or scn.render.is_movie_format:
         return
     
     globals_flag = False
@@ -5386,8 +5386,14 @@ def draw_loom_metadata(self, context):
         layout = self.layout
         box = layout.box()
         row = box.row()
-        row.label(text=" " + note_text.replace("\\n", " ¶ "))
-        row.label(text="", icon="MESH_UVSPHERE")
+        txt = " " + note_text.replace("\\n", " ¶ ")
+        icn = 'MESH_UVSPHERE'
+        if scn.render.is_movie_format:
+            txt = " Video file formats are not supported by Loom"
+            icn = 'ERROR'
+        row.label(text=txt)
+        row.label(text="", icon=icn)
+
         """
         lines = note_text.split("\\n")
         layout.row().label(text="Globals", icon="WORLD") # lines[0]
