@@ -5385,7 +5385,9 @@ def draw_loom_metadata(self, context):
     if globals_flag or "\\n" in note_text:
         layout = self.layout
         box = layout.box()
-        box.row().label(text=note_text.replace("\\n", " ¶ "), icon="MESH_UVSPHERE")
+        row = box.row()
+        row.label(text=" " + note_text.replace("\\n", " ¶ "))
+        row.label(text="", icon="MESH_UVSPHERE")
         """
         lines = note_text.split("\\n")
         layout.row().label(text="Globals", icon="WORLD") # lines[0]
