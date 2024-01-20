@@ -5416,7 +5416,7 @@ addon_keymaps = []
 user_keymap_ids = []
 
 global_var_defaults = {
-    "$BLEND": 'bpy.path.basename(bpy.context.blend_data.filepath)[:-6]',
+    "$BLEND": 'bpy.path.basename(bpy.data.filepath)[:-6]',
     "$F4": '"{:04d}".format(bpy.context.scene.frame_current)',
     "$SCENE": 'bpy.context.scene.name',
     "$CAMERA": 'bpy.context.scene.camera.name',
