@@ -5025,6 +5025,7 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
             preset_values += [
                             'render.resolution_x',
                             'render.resolution_y',
+                            'render.resolution_percentage',
                             'render.filter_size',
                             'render.pixel_aspect_x',
                             'render.pixel_aspect_y',
@@ -5111,6 +5112,8 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
                         
             if bpy.context.scene.render.engine == 'BLENDER_EEVEE':
                 for prop in dir(scene.eevee):
+                    if "options" in prop:
+                        continue
                     if not prop.startswith(ignore_attribs + ("gi_cache_info",)):
                         preset_values.append("scene.eevee.{}".format(prop))
             
@@ -5479,7 +5482,7 @@ addon_keymaps = []
 user_keymap_ids = []
 
 global_var_defaults = {
-    "$BLEND": 'bpy.path.basename(bpy.context.blend_data.filepath)[:-6]',
+    "$BLEND": 'bpy.path.basename(bpy.data.filepath)[:-6]',
     "$F4": '"{:04d}".format(bpy.context.scene.frame_current)',
     "$SCENE": 'bpy.context.scene.name',
     "$CAMERA": 'bpy.context.scene.camera.name',
