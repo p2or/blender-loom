@@ -5107,13 +5107,9 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
                         
             if bpy.context.scene.render.engine == 'BLENDER_EEVEE':
                 for prop in dir(scene.eevee):
-                    blacklist_eevee = (
-                        "gi_cache_info", 
-                        "diffuse_options", 
-                        "reflection_options",
-                        "refraction_options"
-                        )
-                    if not prop.startswith(ignore_attribs + blacklist_eevee):
+                    if "options" in prop:
+                        continue
+                    if not prop.startswith(ignore_attribs + ("gi_cache_info",)):
                         preset_values.append("scene.eevee.{}".format(prop))
             
             if scene.render.engine == 'BLENDER_WORKBENCH':
