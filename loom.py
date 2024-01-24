@@ -1844,7 +1844,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='TRIA_UP', text="").action = 'UP'
         col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='TRIA_DOWN', text="").action = 'DOWN'
 
-        layout.row() # Seperator
+        layout.row() # Separator
         row = layout.row(align=True)
         col = row.column(align=True)
         col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon="DOCUMENTS")
@@ -1853,7 +1853,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         if bpy.data.is_saved: # icon="WORKSPACE"
             row.operator(LOOM_OT_batch_snapshot.bl_idname, icon="IMAGE_BACKGROUND", text="Add Snapshot")
         
-        layout.row() # Seperator
+        layout.row() # Separator
         row = layout.row(align=True)
         sub_row = row.row(align=True)
         sub_row.operator(LOOM_OT_batch_remove_doubles.bl_idname, text="Remove Duplicates", icon="SEQ_SPLITVIEW")
@@ -2886,7 +2886,7 @@ class LOOM_OT_rename_dialog(bpy.types.Operator):
         renamed = []
 
         # Rename the sequence temporary if already in place (windows issue)
-        # -> os.rename fails in case the upcomming file has the same name
+        # -> os.rename fails in case the upcoming file has the same name
         if user_name == name_real and user_hashes == hashes:
             image_sequence_tmp = {}
             for c, (k, v) in enumerate(image_sequence.items(), start=1):
@@ -4350,7 +4350,7 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
 
         if self.arguments:
             '''
-            Limitation: Splits the string by any whitspace, single or double quotes
+            Limitation: Splits the string by any whitespace, single or double quotes
             Could be improved with a regex to find the 'actual paths'
             '''
             pattern = r"""('[^']+'|"[^"]+"|[^\s']+)"""
@@ -4448,7 +4448,7 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
             else:
                 self.write_bat(prefs.bash_file, args_user)
         
-        """ Open Terminal & pass all argements """
+        """ Open Terminal & pass all arguments """
         try:
             if not self.terminal_instance:
                 env_copy = os.environ.copy()
@@ -4989,7 +4989,7 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
     # References:
     # -> ./api/current/bpy.types.Menu.html#preset-menus
     # -> https://blender.stackexchange.com/a/211543
-    # -> scripts/statup/preset.py
+    # -> scripts/startup/preset.py
 
     @property
     def preset_values(self):
