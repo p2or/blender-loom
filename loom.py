@@ -5189,11 +5189,11 @@ def loom_meta_note(scene):
             scene.render.stamp_note_text = replace_globals(scene.render.stamp_note_text)
         
         lines = scene.render.stamp_note_text.split("\\n")
-        scene.render.stamp_note_text = lines[0].strip(" ")
+        scene.render.stamp_note_text = lines[0]
         if len(lines) > 1:
             scene.render.stamp_note_text += os.linesep
             for i in lines[1:]:
-                scene.render.stamp_note_text += i.strip(" ") + os.linesep
+                scene.render.stamp_note_text += i.lstrip(" ") + os.linesep
 
 @persistent
 def loom_meta_note_reset(scene):
