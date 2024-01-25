@@ -5193,7 +5193,7 @@ def loom_meta_note(scene):
         if len(lines) > 1:
             scene.render.stamp_note_text += os.linesep
             for i in lines[1:]:
-                scene.render.stamp_note_text += i.lstrip(" ") + os.linesep
+                scene.render.stamp_note_text += i + os.linesep
 
 @persistent
 def loom_meta_note_reset(scene):
