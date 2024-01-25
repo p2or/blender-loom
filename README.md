@@ -1,6 +1,6 @@
 # Loom
 
-Loom is an add-on for Blender designed to simplify the process of rendering *image sequences* and *specific frames*.
+Loom is a Blender addon designed to simplify the process of rendering *image sequences* and *specific frames*.
 
 ### Table of Contents
 
@@ -137,7 +137,7 @@ Loom allows to replace of all occurrences of any 'global variable' defined in th
 #### Notes 
 
 - The replacement only works if Loom is used for rendering, e.g. using <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F12</kbd>.
-- Defaults for demo purposes are `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$VIEWLAYER`, `$MARKER`, `$COLL` etc.
+- Defaults for demo purposes are `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$MARKER`, `$COLL` etc.
 - To customize the provided time variables for e.g. dailies, see the official documentation on [`strftime()`](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) for all options.
 
 
@@ -218,7 +218,7 @@ The available settings are slightly different per operating system. However, you
 
  1. Download the [latest release](https://github.com/p2or/blender-loom/releases/)
  1. In Blender open up *User Preferences > Addons*
- 1. Click *Install from File*, select `loom.py` and activate the Addon
+ 1. Click *Install from File*, select `loom.py` and activate the addon
  1. Save the *Preferences* and restart Blender
 
 ----
