@@ -1,6 +1,6 @@
 # Loom
 
-Loom is a blender addon designed to simplify the process of rendering *image sequences* and *specific frames*.
+Loom is an add-on for Blender designed to simplify the process of rendering *image sequences* and *specific frames*.
 
 ### Table of Contents
 
@@ -69,7 +69,7 @@ The batch dialog allows to *render multiple .blend files* and *encoding their ou
 
  - Encoding <img width="22" alt="encoding-flag-disabled" src="https://github.com/p2or/blender-loom/assets/512368/645d1594-f20b-4f82-b1ee-c13761d812b7"> is optional and 
  takes place **after the rendering** (path tracing / rasterization) is done
- - Execution of that operator generates a **batch file** in blender's scripts directory (`.sh` or `.bat` depending on the operating system) and runs all commands via command line one by another - you can make the generated batch files your own and modify them (for easy access, click the *disk icon* right beside *Delete temporary batch file* operator in the *Addon Preferences*, to open up blender's scripts directory on your system)
+ - Execution of that operator generates a **batch file** in Blender's scripts directory (`.sh` or `.bat` depending on the operating system) and runs all commands via command line one by another - you can make the generated batch files your own and modify them (for easy access, click the *disk icon* right beside *Delete temporary batch file* operator in the *Addon Preferences*, to open up the scripts directory on your system)
   - In case you need **more space** within the dialog itself or e.g. you'd like to see the **path of each file**, you can change the appearance of the elements within the dialog by clicking the arrow in the upper right corner to change the display settings
 
     <!-- ![Loom Batch Display Menu](https://i.stack.imgur.com/MgHPk.jpg) -->
@@ -119,14 +119,14 @@ You can **render specific keyframes** by selecting the keys in the *Timeline*, *
 #### Options
 
  - If _Limit by Object Selection_ toggle <img width="16" alt="limit_by_object-in-selection" src="https://user-images.githubusercontent.com/512368/204095616-19d16715-91be-4210-81b1-d30eb263d3bb.png">
-is enabled, only the keyframes of the selected objects in the scene are added to the list
- - Holding down <kbd>Ctrl</kbd> while clicking 'Render Selected Keyframes' button will add all keyframes to the list, regardless of what's selected in the _Timeline, Graph Editor or Dopesheet_
- - Holding down <kbd>Alt</kbd> or <kbd>Option</kbd> while clicking the 'Render Selected Keyframes' operator limits the selection of keyframes to the current _frame range of the scene_
- - If you hold down <kbd>Ctrl</kbd> and <kbd>Alt</kbd> or <kbd>Option</kbd> when clicking 'Render selected Keyframes' operator without any object selected, _all keyframes_ within the _frame range of the scene_ are be added to the list
+is enabled, only the keyframes of the selected objects in the scene are added to the list.
+ - Holding down <kbd>Ctrl</kbd> while clicking 'Render Selected Keyframes' button will add all keyframes to the list, regardless of what's selected in the _Timeline, Graph Editor or Dopesheet_.
+ - Holding down <kbd>Alt</kbd> or <kbd>Option</kbd> while clicking the 'Render Selected Keyframes' operator limits the selection of keyframes to the current _frame range of the scene_.
+ - If you hold down <kbd>Ctrl</kbd> and <kbd>Alt</kbd> or <kbd>Option</kbd> when clicking 'Render selected Keyframes' operator without any object selected, _all keyframes_ within the _frame range of the scene_ are be added to the list.
 
 ### File Path Variables
 
-Loom allows to replace of all occurrences of any global variable defined in the *Addon Preferences* via *custom python expressions* for the regular *Output Path* as well as all *File Output* nodes.
+Loom allows to replace of all occurrences of any 'global variable' defined in the *Addon Preferences* via *custom python expressions* for the regular *Output Path* as well as all *File Output* nodes.
 
 <!--
 ![globals](https://user-images.githubusercontent.com/512368/180618964-b4d6ef0c-c542-4925-be40-3e6b65cb9172.gif)
@@ -134,7 +134,13 @@ Loom allows to replace of all occurrences of any global variable defined in the 
 
 <img width="700" alt="Globals" src="https://user-images.githubusercontent.com/512368/180618964-b4d6ef0c-c542-4925-be40-3e6b65cb9172.gif">
 
-Defaults for demo purposes: `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$VIEWLAYER`, `$MARKER`, `$COLL` etc. To customize the time variables for e.g. dailies, see the official documentation on [`strftime()`](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) for all options.
+#### Notes 
+
+- The replacement only works if Loom is used for rendering, e.g. using <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F12</kbd>.
+- Defaults for demo purposes are `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$VIEWLAYER`, `$MARKER`, `$COLL` etc.
+- To customize the provided time variables for e.g. dailies, see the official documentation on [`strftime()`](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) for all options.
+
+
 
 <!-- <img width="736" alt="Globals" src="https://user-images.githubusercontent.com/512368/180612932-93a1882c-06f3-4016-a2f7-13fa61c78dce.png"> -->
 
@@ -190,22 +196,22 @@ The available settings are slightly different per operating system. However, you
 |:----------------------------------|:-------------------------------------------------------|
 | *Timeline Extensions*             | Allows to either turn on or off the display of the 'Loom Popover' and 'Shot Range' dialog in the *Timeline* |
 | *Output Panel Extensions*         | Allows to either turn on or off the display of all *File Output* nodes and the final *Output Path* *(Properties > Output Properties > Output)*  |
-| *Playblast (Experimental)*        | Allows to playback the latest rendered image sequence by using <kbd>Shift</kbd><kbd>Ctrl</kbd><kbd>F11</kbd> hotkey (requires restarting blender after saving the *User Preferences*) |
+| *Playblast (Experimental)*        | Allows to playback the latest rendered image sequence by using <kbd>Shift</kbd><kbd>Ctrl</kbd><kbd>F11</kbd> hotkey (requires restarting Blender after saving the *User Preferences*) |
 | *Default Animation Player*        | Force using the default *Animation Player (User Preferences > Files > Animation Player)* for *Playblast* operator |
 | *Path to FFmpeg Binary*           | Only required if not already part of your linux distribution or not added to the environment variables | 
 | *Force generating `.sh` or `.bat` File* | Generates a batch file for all command line operations, even if those are single ones | 
-| *Delete temporary `.sh` or `.bat` File* | Removes all generated batch files found in *blender's scripts directory* | 
+| *Delete temporary `.sh` or `.bat` File* | Removes all generated batch files found in *Blender's scripts directory* | 
 | *Xterm (Terminal Fallback)*       | Fallback for all command line operations if the system terminal is not supported, [Xterm](https://en.wikipedia.org/wiki/Xterm) is available for most *Linux Distributions* and *older Versions of MacOS*| 
 | *Reset Preferences*       | Reset all properties to their default values (except the binary path to ffmpeg) | 
 
 
 ## Gotchas and Limitations
 
- - Loom does not support direct encoding, make sure the *File Format* is set to *Image*
- - Activation of the *Playblast* hotkey requires restarting blender
- - In case encoding fails for some reason, make sure the path to ffmpeg binary is [absolute](https://en.wikipedia.org/wiki/Path_(computing))
- - Renewal of hotkeys *once entirely removed*, requires resetting the *Addon-Preferences* and restarting blender 
- - Switching the terminal back from *Xterm* to the default system terminal requires resetting the *Addon-Preferences* in some cases
+ - Loom does not support direct encoding, make sure the *File Format* is set to *Image*.
+ - Activation of the *Playblast* hotkey requires restarting Blender.
+ - In case encoding fails for some reason, make sure the path to ffmpeg binary is [absolute](https://en.wikipedia.org/wiki/Path_(computing)).
+ - Renewal of hotkeys *once entirely removed*, requires resetting the *Addon-Preferences* and restarting Blender.
+ - Switching the terminal back from *Xterm* to the default system terminal requires resetting the *Addon-Preferences* in some cases.
 
 
 ## Installation
@@ -213,7 +219,7 @@ The available settings are slightly different per operating system. However, you
  1. Download the [latest release](https://github.com/p2or/blender-loom/releases/)
  1. In Blender open up *User Preferences > Addons*
  1. Click *Install from File*, select `loom.py` and activate the Addon
- 1. Save the *Preferences* and restart blender
+ 1. Save the *Preferences* and restart Blender
 
 ----
 
