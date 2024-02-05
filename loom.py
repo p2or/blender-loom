@@ -1324,26 +1324,23 @@ class LOOM_OT_render_input_dialog(bpy.types.Operator):
     bl_options = {'INTERNAL'}
 
     frame_input: bpy.props.StringProperty()
-    flipbook_render: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    flipbook_dialog: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     operator_description: bpy.props.StringProperty()
 
     @classmethod
     def description(cls, context, properties):
-        if properties.operator_description:
-            return properties.operator_description #return self.__doc__
+        if properties.operator_description: #return self.__doc__
+            return properties.operator_description
 
     def execute(self, context):
         if not self.frame_input:
             return {'CANCELLED'}
         
-        lum = context.scene.loom
-        lum.frame_input = self.frame_input
-
-        if self.flipbook_render:
+        context.scene.loom.frame_input = self.frame_input
+        if self.flipbook_dialog:
             bpy.ops.render.image_sequence_viewport('INVOKE_DEFAULT')
         else:    
             bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
-
         return {'FINISHED'}
         
 
@@ -1356,7 +1353,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     limit_to_object_selection: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     limit_to_scene_frames: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     all_keyframes: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
-    flipbook_render: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    flipbook_dialog: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     
     def int_filter(self, flt):
         try:
@@ -1499,7 +1496,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
 
         bpy.ops.loom.render_input_dialog(
             frame_input=self.rangify_frames(frames),
-            flipbook_render=self.flipbook_render
+            flipbook_dialog=self.flipbook_dialog
             )
         return {'FINISHED'}
 
@@ -1511,7 +1508,7 @@ class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     all_markers: bpy.props.BoolProperty(options={'SKIP_SAVE'})
-    flipbook_render: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    flipbook_dialog: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
 
     def rangify_frames(self, frames):
         """ Converts a list of integers to range string [1,2,3] -> '1-3' """
@@ -1544,7 +1541,7 @@ class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
 
         bpy.ops.loom.render_input_dialog(
             frame_input=self.rangify_frames(markers),
-            flipbook_render=self.flipbook_render
+            flipbook_dialog=self.flipbook_dialog
             )
 
         return {'FINISHED'}
@@ -5729,7 +5726,7 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         row.prop(lum, "scene_selection", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
         ka_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, text="Render Selected Keyframes")
         ka_op.limit_to_object_selection = lum.scene_selection
-        ka_op.flipbook_render = lum.flipbook_flag
+        ka_op.flipbook_dialog = lum.flipbook_flag
         #row.prop(lum, "scene_range", icon="CON_ACTION", text="")
         #ka_op.limit_to_scene_frames = lum.scene_range
         col.separator(factor=0.05) 
@@ -5738,13 +5735,13 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         ma_txt = "Render All Markers" if lum.all_markers_flag else "Render Active Markers"
         ma_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=ma_txt) # icon='PMARKER_ACT',
         ma_op.all_markers = lum.all_markers_flag #PMARKER_SEL
-        ma_op.flipbook_render = lum.flipbook_flag
+        ma_op.flipbook_dialog = lum.flipbook_flag
 
         col.separator(factor=1.5)
         txt = "Render Flipbook Animation" if lum.flipbook_flag else "Render Image Sequence"
         icon = 'RENDER_RESULT' if lum.flipbook_flag else 'SEQUENCE' # RENDER_RESULT, 'SEQ_PREVIEW'
         di = col.operator(LOOM_OT_render_input_dialog.bl_idname, icon=icon, text=txt)
-        di.flipbook_render = lum.flipbook_flag
+        di.flipbook_dialog = lum.flipbook_flag
         di.frame_input = "{}-{}".format(scn.frame_start, scn.frame_end)
         di.operator_description = txt
         col.separator(factor=0.5)
