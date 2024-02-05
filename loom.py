@@ -5525,7 +5525,7 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         layout.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #RENDER_ANIMATION, SEQ_LUMA_WAVEFORM
         layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode")
         layout.operator_context = 'INVOKE_DEFAULT' #'INVOKE_AREA'
-        layout.operator(LOOM_OT_render_flipbook.bl_idname, icon='RESTRICT_VIEW_OFF') #SPHERE
+        layout.operator(LOOM_OT_render_flipbook.bl_idname, icon='SEQ_PREVIEW') #SPHERE
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
         layout.separator()
@@ -5698,32 +5698,36 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
     bl_ui_units_x = 11
 
     def draw(self, context):
+        lum = context.scene.loom
         layout = self.layout
         row = layout.row()
         #row.operator(LOOM_OT_open_folder.bl_idname, icon="RENDER_STILL", text="", emboss=False).folder_path = "//"
         row.label(text="Loom", icon="RENDER_STILL")
-        vp_icon = 'RESTRICT_VIEW_OFF' if context.scene.loom.flipbook_flag else 'RESTRICT_VIEW_ON' #SHADING_RENDERED
-        row.prop(context.scene.loom, "flipbook_flag", icon=vp_icon, text="", emboss=False) #
+        vp_icon = 'RESTRICT_VIEW_OFF' if lum.flipbook_flag else 'RESTRICT_VIEW_ON' #SHADING_RENDERED
+        row.prop(lum, "flipbook_flag", icon=vp_icon, text="", emboss=False) #
         row = layout.row()
 
         col = layout.column()
         #col.label(text="Loom", icon='RENDER_STILL')
         #col = layout.column()
         row = col.row(align=True)
-        row.prop(context.scene.loom, "scene_selection", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
+        row.prop(lum, "scene_selection", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
         ka_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, text="Render Selected Keyframes")
-        ka_op.limit_to_object_selection = context.scene.loom.scene_selection
-        #row.prop(context.scene.loom, "scene_range", icon="CON_ACTION", text="")
-        #ka_op.limit_to_scene_frames = context.scene.loom.scene_range
+        ka_op.limit_to_object_selection = lum.scene_selection
+        #row.prop(lum, "scene_range", icon="CON_ACTION", text="")
+        #ka_op.limit_to_scene_frames = lum.scene_range
         col.row() # Temp Separator
         row = col.row(align=True)
-        row.prop(context.scene.loom, "all_markers_flag", icon="TEMP", text="") #"TIME"
-        ma_txt = "Render All Markers" if context.scene.loom.all_markers_flag else "Render Active Markers"
+        row.prop(lum, "all_markers_flag", icon="TEMP", text="") #"TIME"
+        ma_txt = "Render All Markers" if lum.all_markers_flag else "Render Active Markers"
         ma_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=ma_txt) # icon='PMARKER_ACT',
-        ma_op.all_markers = context.scene.loom.all_markers_flag #PMARKER_SEL
+        ma_op.all_markers = lum.all_markers_flag #PMARKER_SEL
 
-        #col.separator()
-        #col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
+        col.separator()
+        if lum.flipbook_flag:
+            col.operator(LOOM_OT_render_flipbook.bl_idname, icon='SEQ_PREVIEW')
+        else:
+            col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
         col.separator(factor=1.0)
 
 def draw_loom_dopesheet(self, context):
