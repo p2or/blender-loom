@@ -976,6 +976,12 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         items=render_preset_callback,
         options={'SKIP_SAVE'})
 
+    flipbook_flag: bpy.props.BoolProperty(
+        name="Render Flipbook",
+        description="Render the Contents of the Viewport",
+        default=False,
+        options={'SKIP_SAVE'})
+
 # -------------------------------------------------------------------
 #    UI Operators
 # -------------------------------------------------------------------
@@ -1311,153 +1317,6 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
                 row.operator(LOOM_OT_render_full_scale.bl_idname, icon="INDIRECT_ONLY_OFF", text="", emboss=False)
 
 
-class LOOM_OT_flipbook_dialog(bpy.types.Operator):
-    """Render Flipbook Dialog"""
-    bl_idname = "loom.flipbook_dialog"
-    bl_label = "Render Flipbook"
-    bl_options = {'REGISTER', 'INTERNAL'}
-
-    keep_overlays: bpy.props.BoolProperty(
-        name="Keep Overlays",
-        description="Do not turn off overlays while rendering",
-        default=False,
-        options={'SKIP_SAVE'})
-
-    maximize_camera_bounds: bpy.props.BoolProperty(
-        name="Maximize Camera Bounds",
-        description="Center the camera and maximize its bounds to the viewport",
-        default=False,
-        options={'SKIP_SAVE'})
-
-    zoom_full: bpy.props.BoolProperty(
-        name="1:1 Camera Resolution",
-        description="Match the camera 1:1 to the render output",
-        default=False,
-        options={'SKIP_SAVE'})
-
-    open_render_folder: bpy.props.BoolProperty(
-        name="Open Render Folder",
-        description="Open up the system folder when done",
-        default=True,
-        options={'SKIP_SAVE'})
-
-    @classmethod
-    def poll(cls, context):
-        return not context.scene.render.is_movie_format
-
-    def check(self, context):
-        return True
-
-    def execute(self, context):
-        scn = context.scene
-        lum = scn.loom
-        filter_individual_numbers = lum.filter_input
-        user_input = lum.frame_input
-        bpy.ops.wm.save_userpref()
-
-        import io
-        from contextlib import redirect_stdout, suppress
-        # https://projects.blender.org/blender/blender/issues/97284
-        # https://blender.stackexchange.com/a/45268
-
-        stdout = io.StringIO()
-        with suppress(RuntimeError):
-            with redirect_stdout(stdout):
-                bpy.ops.render.image_sequence_opengl(
-                    frames = user_input, 
-                    isolate_numbers = filter_individual_numbers,
-                    disable_overlays = not self.keep_overlays,
-                    maximize_camera_bounds = self.maximize_camera_bounds,
-                    zoom_full=self.zoom_full)
-        
-        stdout.seek(0)
-        output = stdout.read()
-        
-        for o in output.splitlines():
-            if o.startswith("Error"):
-                self.report({'ERROR'}, o.replace("Error: ", ""))
-                return {'CANCELLED'}
-            elif o.startswith("Warning"):
-                self.report({'WARNING'}, o.replace("Warning: ", ""))
-                return {'CANCELLED'}
-            elif o.startswith("Info"):
-                self.report({'INFO'}, o.replace("Info: ", ""))
-
-        """ Open up the folder """
-        if self.open_render_folder:
-            prefs = context.preferences.addons[__name__].preferences
-            glob_vars = prefs.global_variable_coll
-
-            output_folder, filename = os.path.split(bpy.path.abspath(scn.render.filepath))
-            rndr_folder = os.path.realpath(output_folder)
-            if any(ext in rndr_folder for ext in glob_vars.keys()):
-                rndr_folder = replace_globals(rndr_folder)
-
-            bpy.ops.loom.open_folder(
-                folder_path=rndr_folder)
-
-        return {"FINISHED"}
-
-    def invoke(self, context, event):
-        scn = context.scene
-        lum = scn.loom
-        prefs = context.preferences.addons[__name__].preferences
-        
-        if not lum.is_property_set("frame_input") or not lum.frame_input:
-            bpy.ops.loom.guess_frames(detect_missing_frames=False)
-        
-        return context.window_manager.invoke_props_dialog(self, 
-            width=(prefs.render_dialog_width))
-
-    def draw(self, context):
-        scn = context.scene
-        lum = scn.loom
-        layout = self.layout
-        split_factor = .17
-
-        split = layout.split(factor=split_factor)
-        col = split.column(align=True)
-        col.label(text="Frames:")
-        col = split.column(align=True)
-        sub = col.row(align=True)
-        sub.operator(LOOM_OT_guess_frames.bl_idname, icon='PREVIEW_RANGE', text="")
-        sub.prop(lum, "frame_input", text="")
-        sub.prop(lum, "filter_input", icon='FILTER', icon_only=True)
-        sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="")       
-
-        # current/bpy.types.PreferencesSystem.html#bpy.types.PreferencesSystem.viewport_aa
-        split = layout.split(factor=split_factor) # prop(pref_system, "viewport_aa")
-        split.label(text="Settings:")#Anti-Aliasing:
-        row = split.row(align=True)
-        row.prop(self, "keep_overlays", toggle=True, icon='OVERLAY', text="")
-        row.prop(context.preferences.system, "viewport_aa", text="")
-        #row.prop(context.preferences.system, "anisotropic_filter", text="")
-        #row = layout.row(align=True)
-        
-        #row.prop(context.scene.display, "viewport_aa", text="")
-        """
-        split = layout.split(factor=split_factor) # prop(pref_system, "viewport_aa")
-        split.label(text="Camera:")
-        row = split.row(align=True)
-        row.prop(self, "zoom_full", toggle=True)
-        row.prop(self, "maximize_camera_bounds", toggle=True)
-        """
-        """
-        split = layout.split(factor=split_factor)
-        split.label(text="Settings:")
-        row = split.row() #align=True
-        row.prop(self, "keep_overlays", toggle=True, icon='OVERLAY')
-        """
-        row = layout.row(align=True)    
-        row.prop(self, "open_render_folder", text="Open render folder when done")
-
-        hlp = row.operator(LOOM_OT_openURL.bl_idname, icon='HELP', text="", emboss=False)
-        hlp.description = "Open Loom Documentation on Github"
-        hlp.url = bl_info["doc_url"]
-
-        #row.prop(self, "keep_overlays", toggle=True, icon='OVERLAY', text="")
-
-
 class LOOM_OT_render_input_dialog(bpy.types.Operator):
     """Pass custom Frame Numbers and Ranges to the Render Dialog"""
     bl_idname = "loom.render_input_dialog"
@@ -1467,12 +1326,18 @@ class LOOM_OT_render_input_dialog(bpy.types.Operator):
     frame_input: bpy.props.StringProperty()
 
     def execute(self, context):
-        if self.frame_input:
-            context.scene.loom.frame_input = self.frame_input
-            bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
-            return {'FINISHED'}
-        else:
+        if not self.frame_input:
             return {'CANCELLED'}
+        
+        lum = context.scene.loom
+        lum.frame_input = self.frame_input
+
+        if lum.flipbook_flag:
+            bpy.ops.render.image_sequence_viewport('INVOKE_DEFAULT')
+        else:
+            bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
+
+        return {'FINISHED'}
         
 
 class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
@@ -1573,7 +1438,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
 
     def execute(self, context):
         space = context.space_data
-
+        
         selected_keys = None
         if space.type == 'DOPESHEET_EDITOR':
             mode = context.space_data.mode
@@ -1660,9 +1525,9 @@ class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
 
         if not markers:
             if not self.all_markers:
-                self.report({'ERROR'}, "Select any Marker to add or enable 'All Markers'.")
+                self.report({'ERROR'}, "Select any Marker to render or enable 'All Markers'.")
             else:
-                self.report({'ERROR'}, "No Markers to add.")
+                self.report({'ERROR'}, "No Markers to render.")
             return {"CANCELLED"}
 
         bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(markers))
@@ -4126,9 +3991,9 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
 
 class LOOM_OT_render_flipbook(bpy.types.Operator):
-    """Render flipbook"""
-    bl_idname = "render.image_sequence_opengl"
-    bl_label = "Render Flipbook"
+    """Render the Contents of the Viewport"""
+    bl_idname = "render.image_sequence_viewport"
+    bl_label = "Render Flipbook Animation"
     bl_options = {'REGISTER', 'UNDO'}
 
     frames: bpy.props.StringProperty(
@@ -4145,20 +4010,17 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
         description="Filter raw elements in frame input",
         default=False)
     
-    disable_overlays: bpy.props.BoolProperty(
-        name="Disable Overlays",
-        description="Disable all overlays while rendering",
-        default=True)
+    keep_overlays: bpy.props.BoolProperty(
+        name="Keep Overlays",
+        description="Do not turn off overlays while rendering",
+        default=False,
+        options={'SKIP_SAVE'})
 
-    maximize_camera_bounds: bpy.props.BoolProperty(
-        name="Maximize Camera",
-        description="Center the camera and maximize its bounds to the viewport",
-        default=False)
-    
-    zoom_full: bpy.props.BoolProperty(
-        name="Zoom Camera",
-        description="Match the camera 1:1 to the render output",
-        default=False)
+    open_render_folder: bpy.props.BoolProperty(
+        name="Open Render Folder",
+        description="Open up the system folder when done",
+        default=False,
+        options={'SKIP_SAVE'})
 
     _image_formats = {'BMP': 'bmp', 'IRIS': 'iris', 'PNG': 'png', 'JPEG': 'jpg', 
         'JPEG2000': 'jp2', 'TARGA': 'tga', 'TARGA_RAW': 'tga', 'CINEON': 'cin', 
@@ -4325,18 +4187,7 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
         """ Handle overlay states """
         self._overlays_state = area.spaces[0].overlay.show_overlays
         #self._gizmos_state = area.spaces[0].overlay.show_overlays
-
-        if self.disable_overlays:
-            self.overlays(area, False)
-
-        """ Optimizations """
-        if self.maximize_camera_bounds and self.in_camera(area):
-            with bpy.context.temp_override(area=area, region=area.regions[0]):
-                bpy.ops.view3d.view_center_camera()
-
-        if self.zoom_full and self.in_camera(area):
-            with bpy.context.temp_override(area=area, region=area.regions[0]):
-                bpy.ops.view3d.zoom_camera_1_to_1()
+        self.overlays(area, self.keep_overlays)
 
         """ Main output path """        
         self._output_path = scn.render.filepath
@@ -4385,7 +4236,68 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
         self.overlays(area, self._overlays_state)
         self.final_report()
         self.reset_output_path(scn)
+
+        """ Open up the folder """
+        if self.open_render_folder:
+            prefs = context.preferences.addons[__name__].preferences
+            glob_vars = prefs.global_variable_coll
+
+            output_folder, filename = os.path.split(bpy.path.abspath(scn.render.filepath))
+            rndr_folder = os.path.realpath(output_folder)
+            if any(ext in rndr_folder for ext in glob_vars.keys()):
+                rndr_folder = replace_globals(rndr_folder)
+
+            bpy.ops.loom.open_folder(
+                folder_path=rndr_folder)
+        
         return {"FINISHED"}
+
+    def draw(self, context):
+        scn = context.scene
+        lum = scn.loom
+        layout = self.layout
+        split_factor = .17
+
+        split = layout.split(factor=split_factor)
+        col = split.column(align=True)
+        col.label(text="Frames:")
+        col = split.column(align=True)
+        sub = col.row(align=True)
+        sub.operator(LOOM_OT_guess_frames.bl_idname, icon='PREVIEW_RANGE', text="")
+        sub.prop(lum, "frame_input", text="")
+        sub.prop(lum, "filter_input", icon='FILTER', icon_only=True)
+        sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="")       
+
+        # current/bpy.types.PreferencesSystem.html#bpy.types.PreferencesSystem.viewport_aa
+        split = layout.split(factor=split_factor) # prop(pref_system, "viewport_aa")
+        split.label(text="Settings:")#Anti-Aliasing:
+        row = split.row(align=True)
+        row.prop(self, "keep_overlays", toggle=True, icon='OVERLAY', text="")
+        row.prop(context.preferences.system, "viewport_aa", text="")
+        #row.prop(context.preferences.system, "anisotropic_filter", text="")
+        #row = layout.row(align=True)
+
+        row = layout.row(align=True)    
+        row.prop(self, "open_render_folder", text="Open render folder when done")
+
+        hlp = row.operator(LOOM_OT_openURL.bl_idname, icon='HELP', text="", emboss=False)
+        hlp.description = "Open Loom Documentation on Github"
+        hlp.url = bl_info["doc_url"]
+
+    def invoke(self, context, event):
+        scn = context.scene
+        lum = scn.loom
+        prefs = context.preferences.addons[__name__].preferences
+        
+        # Set invoke properties
+        self.frames = lum.frame_input
+        self.open_render_folder = True
+
+        if not lum.is_property_set("frame_input") or not lum.frame_input:
+            bpy.ops.loom.guess_frames(detect_missing_frames=False)
+        
+        return context.window_manager.invoke_props_dialog(self, 
+            width=(prefs.render_dialog_width))
 
 
 # -------------------------------------------------------------------
@@ -5613,7 +5525,7 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         layout.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #RENDER_ANIMATION, SEQ_LUMA_WAVEFORM
         layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode")
         layout.operator_context = 'INVOKE_DEFAULT' #'INVOKE_AREA'
-        layout.operator(LOOM_OT_flipbook_dialog.bl_idname, icon='MESH_ICOSPHERE', text="Render Flipbook (OpenGL)") #SPHERE
+        layout.operator(LOOM_OT_render_flipbook.bl_idname, icon='RESTRICT_VIEW_OFF') #SPHERE
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
         layout.separator()
@@ -5787,9 +5699,11 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        row = layout.row(align=True)
-        row.operator(LOOM_OT_open_folder.bl_idname, icon="RENDER_STILL", text="", emboss=False).folder_path = "//"
-        row.label(text=" Loom")
+        row = layout.row()
+        #row.operator(LOOM_OT_open_folder.bl_idname, icon="RENDER_STILL", text="", emboss=False).folder_path = "//"
+        row.label(text="Loom", icon="RENDER_STILL")
+        vp_icon = 'RESTRICT_VIEW_OFF' if context.scene.loom.flipbook_flag else 'RESTRICT_VIEW_ON' #SHADING_RENDERED
+        row.prop(context.scene.loom, "flipbook_flag", icon=vp_icon, text="", emboss=False) #
         row = layout.row()
 
         col = layout.column()
@@ -5801,15 +5715,15 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         ka_op.limit_to_object_selection = context.scene.loom.scene_selection
         #row.prop(context.scene.loom, "scene_range", icon="CON_ACTION", text="")
         #ka_op.limit_to_scene_frames = context.scene.loom.scene_range
-        
+        col.row() # Temp Separator
         row = col.row(align=True)
         row.prop(context.scene.loom, "all_markers_flag", icon="TEMP", text="") #"TIME"
         ma_txt = "Render All Markers" if context.scene.loom.all_markers_flag else "Render Active Markers"
         ma_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=ma_txt) # icon='PMARKER_ACT',
         ma_op.all_markers = context.scene.loom.all_markers_flag #PMARKER_SEL
 
-        col.separator()
-        col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
+        #col.separator()
+        #col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
         col.separator(factor=1.0)
 
 def draw_loom_dopesheet(self, context):
@@ -5887,7 +5801,6 @@ classes = (
     LOOM_OT_guess_frames,
     LOOM_OT_verify_frames,
     LOOM_OT_render_dialog,
-    LOOM_OT_flipbook_dialog,
     LOOM_OT_render_input_dialog,
     LOOM_OT_selected_keys_dialog,
     LOOM_OT_selected_makers_dialog,
@@ -5971,7 +5884,7 @@ def register():
         kmi = km.keymap_items.new(LOOM_OT_encode_dialog.bl_idname, 'F9', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
-        kmi = km.keymap_items.new(LOOM_OT_flipbook_dialog.bl_idname, 'F10', 'PRESS', ctrl=True, shift=True)
+        kmi = km.keymap_items.new(LOOM_OT_render_flipbook.bl_idname, 'F10', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
         kmi = km.keymap_items.new(LOOM_OT_batch_dialog.bl_idname, 'F12', 'PRESS', ctrl=True, shift=True, alt=True)
@@ -5998,7 +5911,7 @@ def register():
             kmi = km.keymap_items.new(LOOM_OT_encode_dialog.bl_idname, 'F9', 'PRESS', oskey=True, shift=True)
             kmi.active = True
             addon_keymaps.append((km, kmi))
-            kmi = km.keymap_items.new(LOOM_OT_flipbook_dialog.bl_idname, 'F10', 'PRESS', oskey=True, shift=True)
+            kmi = km.keymap_items.new(LOOM_OT_render_flipbook.bl_idname, 'F10', 'PRESS', oskey=True, shift=True)
             kmi.active = True
             addon_keymaps.append((km, kmi))
             kmi = km.keymap_items.new(LOOM_OT_batch_dialog.bl_idname, 'F12', 'PRESS', oskey=True, shift=True, alt=True)
