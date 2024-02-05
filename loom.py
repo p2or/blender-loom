@@ -455,6 +455,22 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         name="Index",
         default=0)
 
+    render_presets_path: bpy.props.StringProperty(
+        subtype = "FILE_PATH",
+        default = bpy.utils.user_resource(
+            'SCRIPTS',
+            path=os.path.join("presets", "loom", "render_presets")))
+    
+    render_display_type: bpy.props.EnumProperty(
+        name="Render Display Type",
+        description="Location where rendered images will be displayed to",
+        items=[ ('NONE', "Keep User Interface", ""),
+                ('AREA', "Image Editor", ""),
+                ('WINDOW', "New Window", "")
+              ],
+        default='WINDOW'
+        )
+
     display_general: bpy.props.BoolProperty(
         default=True)
 
@@ -472,12 +488,6 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
 
     display_hotkeys: bpy.props.BoolProperty(
         default=True)
-    
-    render_presets_path: bpy.props.StringProperty(
-        subtype = "FILE_PATH",
-        default = bpy.utils.user_resource(
-            'SCRIPTS',
-            path=os.path.join("presets", "loom", "render_presets")))
 
     def draw_state(self, prop):
         return 'RADIOBUT_OFF' if not prop else 'RADIOBUT_ON'
@@ -1248,7 +1258,6 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         lum = scn.loom
         prefs = context.preferences.addons[__name__].preferences
         layout = self.layout  #layout.label(text="Render Image Sequence")
-        pref_view = context.preferences.view
         split_factor = .17
 
         split = layout.split(factor=split_factor)
@@ -1270,7 +1279,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         col = split.column(align=True)
         sub = col.row(align=True)
         sub.active = not lum.command_line
-        sub.prop(pref_view, "render_display_type", text="")
+        sub.prop(prefs, "render_display_type", text="") #context.preferences.view
         sub.prop(scn.render, "use_lock_interface", icon_only=True)
             
         row = layout.row(align=True)    
@@ -1849,7 +1858,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='TRIA_UP', text="").action = 'UP'
         col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='TRIA_DOWN', text="").action = 'DOWN'
 
-        layout.row() # Seperator
+        layout.row() # Separator
         row = layout.row(align=True)
         col = row.column(align=True)
         col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon="DOCUMENTS")
@@ -1858,7 +1867,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         if bpy.data.is_saved: # icon="WORKSPACE"
             row.operator(LOOM_OT_batch_snapshot.bl_idname, icon="IMAGE_BACKGROUND", text="Add Snapshot")
         
-        layout.row() # Seperator
+        layout.row() # Separator
         row = layout.row(align=True)
         sub_row = row.row(align=True)
         sub_row.operator(LOOM_OT_batch_remove_doubles.bl_idname, text="Remove Duplicates", icon="SEQ_SPLITVIEW")
@@ -2891,7 +2900,7 @@ class LOOM_OT_rename_dialog(bpy.types.Operator):
         renamed = []
 
         # Rename the sequence temporary if already in place (windows issue)
-        # -> os.rename fails in case the upcomming file has the same name
+        # -> os.rename fails in case the upcoming file has the same name
         if user_name == name_real and user_hashes == hashes:
             image_sequence_tmp = {}
             for c, (k, v) in enumerate(image_sequence.items(), start=1):
@@ -3685,7 +3694,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
     _rendered_frames, _skipped_frames = [], []
     _timer = _frames = _stop = _rendering = _dec = _log = None
     _output_path = _folder = _filename = _extension = None
-    _subframe_flag = False
+    _subframe_flag = _temp_display_type = False
     _output_nodes = {}
     
     @classmethod
@@ -3852,8 +3861,9 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
     def execute(self, context):
         scn = context.scene
-        prefs = context.preferences.addons[__name__].preferences
-        glob_vars = prefs.global_variable_coll
+        prefs = context.preferences
+        loom_prefs = prefs.addons[__name__].preferences
+        glob_vars = loom_prefs.global_variable_coll
     
         """ Filter user input """
         self._frames = filter_frames(self.frames, scn.frame_step, self.isolate_numbers)
@@ -3873,7 +3883,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         self._filename = self.safe_filename(self._filename)
         #self._output_path = os.path.join(self._folder, self._filename)
 
-        # Replace globals in main output path
+        """ Replace globals in main output path """
         if any(ext in self._folder for ext in glob_vars.keys()):
             self._folder = replace_globals(self._folder)
             bpy.ops.loom.create_directory(directory=self._folder)
@@ -3906,14 +3916,14 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             self._subframe_flag = True
 
         """ Logging """
-        if prefs.log_render: self.log_sequence(scn, prefs.log_render_limit)
+        if loom_prefs.log_render: self.log_sequence(scn, loom_prefs.log_render_limit)
         
         """ Render silent """
         if self.render_silent:
             """ Apply custom Render Preset """
             if self.render_preset and self.render_preset != "EMPTY":
                 bpy.ops.script.execute_preset(
-                    filepath=os.path.join(prefs.render_presets_path,self.render_preset),
+                    filepath=os.path.join(loom_prefs.render_presets_path,self.render_preset),
                     menu_idname=LOOM_PT_render_presets.__name__)
             
             for frame_number in self._frames:
@@ -3935,6 +3945,12 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             wm = context.window_manager
             self._timer = wm.event_timer_add(0.3, window=context.window)
             wm.modal_handler_add(self)
+
+            """ Set render display type, see: #78 """
+            #if prefs.view.render_display_type == 'SCREEN': #'WINDOW'
+            self._temp_display_type = prefs.view.render_display_type
+            prefs.view.render_display_type = loom_prefs.render_display_type
+
             return {"RUNNING_MODAL"}
 
     def modal(self, context, event):
@@ -3948,9 +3964,13 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 bpy.app.handlers.render_post.remove(self.post_render)
                 bpy.app.handlers.render_cancel.remove(self.cancel_render)
 
-                """ Reset output path & display results """
+                """ Reset output path & display type"""
                 self.reset_output_paths(scn)
+                context.preferences.view.render_display_type = self._temp_display_type
+                
+                """ Display results """
                 self.final_report()
+
                 return {"FINISHED"}
 
             elif self._rendering is False:
@@ -4355,7 +4375,7 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
 
         if self.arguments:
             '''
-            Limitation: Splits the string by any whitspace, single or double quotes
+            Limitation: Splits the string by any whitespace, single or double quotes
             Could be improved with a regex to find the 'actual paths'
             '''
             pattern = r"""('[^']+'|"[^"]+"|[^\s']+)"""
@@ -4453,7 +4473,7 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
             else:
                 self.write_bat(prefs.bash_file, args_user)
         
-        """ Open Terminal & pass all argements """
+        """ Open Terminal & pass all arguments """
         try:
             if not self.terminal_instance:
                 env_copy = os.environ.copy()
@@ -4994,7 +5014,7 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
     # References:
     # -> ./api/current/bpy.types.Menu.html#preset-menus
     # -> https://blender.stackexchange.com/a/211543
-    # -> scripts/statup/preset.py
+    # -> scripts/startup/preset.py
 
     @property
     def preset_values(self):
