@@ -1328,7 +1328,7 @@ class LOOM_OT_render_input_dialog(bpy.types.Operator):
     operator_description: bpy.props.StringProperty()
 
     @classmethod
-    def description(self, context, properties):
+    def description(cls, context, properties):
         if properties.operator_description:
             return properties.operator_description #return self.__doc__
 
