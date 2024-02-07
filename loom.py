@@ -1338,7 +1338,7 @@ class LOOM_OT_render_input_dialog(bpy.types.Operator):
         
         context.scene.loom.frame_input = self.frame_input
         if self.flipbook_dialog:
-            bpy.ops.render.image_sequence_viewport('INVOKE_DEFAULT')
+            bpy.ops.loom.render_flipbook('INVOKE_DEFAULT')
         else:    
             bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
         return {'FINISHED'}
@@ -4005,9 +4005,9 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
 class LOOM_OT_render_flipbook(bpy.types.Operator):
     """Render the Contents of the Viewport"""
-    bl_idname = "render.image_sequence_viewport"
+    bl_idname = "loom.render_flipbook"
     bl_label = "Render Flipbook Animation"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER'}
 
     frames: bpy.props.StringProperty(
         name="Frames",
