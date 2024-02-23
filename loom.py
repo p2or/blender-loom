@@ -625,8 +625,8 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             wp.url = "https://en.wikipedia.org/wiki/Xterm"
 
             """ Linux/OSX specific properties """
-            if platform.startswith('win32'):
-                rsh.enabled = False
+            #if not platform.startswith('win32'):
+            #    rsh.enabled = False
 
             """ OSX specific properties """
             if platform.startswith('darwin'):
