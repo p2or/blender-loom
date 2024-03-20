@@ -38,8 +38,8 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 9, 1),
-    "blender": (2, 82, 0),
+    "version": (0, 9, 2),
+    "blender": (3, 0, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
     "support": "COMMUNITY",
@@ -3581,7 +3581,7 @@ class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
 
 
 class LOOM_OT_open_preferences(bpy.types.Operator):
-    """Loom Preferences Window"""
+    """Preferences Window"""
     bl_idname = "loom.open_preferences"
     bl_label = "Loom Preferences"
     bl_options = {'INTERNAL'}
@@ -5302,8 +5302,8 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
         layout.operator(LOOM_OT_rename_dialog.bl_idname, icon="SORTALPHA")
-        if bpy.app.version < (3, 0, 0): # Test again, if released
-            layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
+        #if bpy.app.version < (3, 0, 0): # Test again, if released
+        layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
 
 def draw_loom_render_menu(self, context):
     layout = self.layout
@@ -5709,10 +5709,7 @@ def register():
     bpy.types.PROPERTIES_HT_header.append(draw_loom_render_presets)
     bpy.types.LOOM_PT_render_presets.append(draw_loom_preset_flags) 
     bpy.types.LOOM_PT_render_presets.prepend(draw_loom_preset_header)
-    if bpy.app.version >= (3, 0, 0):
-        bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
-    else:
-        bpy.types.TOPBAR_MT_app.append(draw_loom_project)
+    bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
 
 
 def unregister():
@@ -5727,10 +5724,7 @@ def unregister():
     bpy.types.PROPERTIES_HT_header.remove(draw_loom_render_presets)
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_flags)
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_header)
-    if bpy.app.version >= (3, 0, 0):
-        bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
-    else:
-        bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
+    bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
     
     from bpy.utils import unregister_class
     for cls in reversed(classes):
