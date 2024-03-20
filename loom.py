@@ -38,8 +38,8 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 9, 1),
-    "blender": (2, 82, 0),
+    "version": (0, 9, 2),
+    "blender": (3, 0, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
     "support": "COMMUNITY",
@@ -625,8 +625,8 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             wp.url = "https://en.wikipedia.org/wiki/Xterm"
 
             """ Linux/OSX specific properties """
-            if platform.startswith('win32'):
-                rsh.enabled = False
+            #if not platform.startswith('win32'):
+            #    rsh.enabled = False
 
             """ OSX specific properties """
             if platform.startswith('darwin'):
@@ -1177,6 +1177,22 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
     def check(self, context):
         return True
     
+    def validate_comp(self, context):
+        if context.scene.use_nodes:
+            for n in context.scene.node_tree.nodes:
+                if n.type == 'R_LAYERS' and not n.scene.camera:
+                    if not n.mute:
+                        return n.scene.name
+        return None
+
+    def validate_sequencer(self, context):
+        seq = context.scene.sequence_editor
+        for i in seq.sequences_all:
+            if i.type == 'SCENE' and not i.mute:
+                if not seq.channels[i.channel].mute:
+                    return True
+        return False
+
     def write_permission(self, folder): # Hacky, but ok for now
         # https://stackoverflow.com/q/2113427/3091066
         try: # os.access(os.path.realpath(bpy.path.abspath(out_folder)), os.W_OK)
@@ -1197,7 +1213,6 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
 
         """ Error handling """
         user_error = False
-
         if not self.options.is_invoke:
             user_error = True
 
@@ -1205,20 +1220,38 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             self.report({'ERROR'}, "Blend-file not saved.")
             bpy.ops.wm.save_as_mainfile('INVOKE_DEFAULT')
             user_error = True
-        
-        if not scn.camera:
-            self.report({'WARNING'}, "No camera in scene.")
-            user_error = True
-            if scn.use_nodes:
-                user_error = False
 
         if not user_input and not any(char.isdigit() for char in user_input):
             self.report({'ERROR'}, "No frames to render.")
             user_error = True
-
+        
+        """ Scene validation """
+        if scn.render.use_sequencer and len(scn.sequence_editor.sequences):
+            if self.validate_sequencer(context):
+                if not user_input.isdigit():
+                    self.report(
+                        {'INFO'}, 
+                        "Scene Strip(s) in 'Sequencer' detected: " 
+                        "Switched to Command Line rendering...")
+                    lum.command_line = True
+        else:
+            if scn.render.use_compositing and scn.use_nodes:
+                rlyr = self.validate_comp(context)
+                if rlyr is not None:
+                    self.report(
+                        {'WARNING'}, 
+                        "No camera assigned in '{}' " 
+                        "scene (used in comp).".format(rlyr))
+                    user_error = True
+            else:
+                if not scn.camera:
+                    self.report({'WARNING'}, "No active camera.")
+                    user_error = True
+        
         if user_error: #bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
-
+        
+        """ Tests passed """
         if not lum.override_render_settings:
             lum.property_unset("custom_render_presets")
             
@@ -1229,12 +1262,13 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
                 frames = user_input,
                 threads = lum.threads,
                 isolate_numbers = filter_individual_numbers,
-                render_preset=lum.custom_render_presets)
+                render_preset = lum.custom_render_presets)
         else:
             bpy.ops.render.image_sequence(
                 frames = user_input, 
                 isolate_numbers = filter_individual_numbers,
-                render_silent = False)
+                render_silent = False,
+                validate_scene = False)
         return {"FINISHED"}
 
     def invoke(self, context, event):
@@ -1250,7 +1284,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             bpy.ops.loom.verify_terminal()
         if not lum.is_property_set("threads") or not lum.threads:
             lum.threads = scn.render.threads  # *.5
-        
+
         return context.window_manager.invoke_props_dialog(self, 
             width=(prefs.render_dialog_width))
 
@@ -1594,7 +1628,7 @@ class LOOM_MT_display_settings(bpy.types.Menu):
             layout.prop(prefs, "batch_path_col_width")
         else:
             layout.prop(prefs, "batch_name_col_width")
-        layout.operator("loom.batch_dialog_reset_display", icon="ANIM")
+        layout.operator(LOOM_OT_batch_dialog_reset.bl_idname, icon="ANIM")
 
 
 class LOOM_UL_batch_list(bpy.types.UIList):
@@ -1608,18 +1642,27 @@ class LOOM_UL_batch_list(bpy.types.UIList):
         else:
             split = layout.split(factor=prefs.batch_name_col_width, align=True)
             split_left = split.split(factor=0.1)
-            split_left.operator("loom.batch_default_frames", text="{:02d}".format(index+1), emboss=False).item_id = index
+            split_left.operator(
+                LOOM_OT_batch_default_range.bl_idname,
+                text="{:02d}".format(index+1), 
+                emboss=False).item_id = index
             split_left.label(text=item.name, icon='FILE_BLEND')
             
         split_right = split.split(factor=.99)
         row = split_right.row(align=True)
-        row.operator("loom.batch_default_frames", icon="PREVIEW_RANGE", text="").item_id = index
+        row.operator(
+            LOOM_OT_batch_default_range.bl_idname, 
+            icon="PREVIEW_RANGE", 
+            text="").item_id = index
         row.prop(item, "frames", text="") #, icon='IMAGEFILE'
         #row = split_right.row(align=True) #row.prop(item, "input_filter", text="", icon='FILTER')
         row.prop(item, "input_filter", text="", icon='FILTER')
 
         row.prop(item, "encode_flag", text="", icon='FILE_MOVIE')
-        row.operator("loom.batch_verify_input", text="", icon='GHOST_ENABLED').item_id = index
+        row.operator(
+            LOOM_OT_batch_verify_input.bl_idname, 
+            text="", 
+            icon='GHOST_ENABLED').item_id = index
         row.separator()
         row.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(item.path)
@@ -3563,7 +3606,7 @@ class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
 
 
 class LOOM_OT_open_preferences(bpy.types.Operator):
-    """Loom Preferences Window"""
+    """Preferences Window"""
     bl_idname = "loom.open_preferences"
     bl_label = "Loom Preferences"
     bl_options = {'INTERNAL'}
@@ -3706,6 +3749,11 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         name="Render Preset",
         description="Pass a custom Preset.py")
 
+    validate_scene: bpy.props.BoolProperty(
+        name="Scene Validation",
+        description="Sequencer Strips, Active Camera etc.",
+        default=True)
+
     _image_formats = {'BMP': 'bmp', 'IRIS': 'iris', 'PNG': 'png', 'JPEG': 'jpg', 
         'JPEG2000': 'jp2', 'TARGA': 'tga', 'TARGA_RAW': 'tga', 'CINEON': 'cin', 
         'DPX': 'dpx', 'OPEN_EXR_MULTILAYER': 'exr', 'OPEN_EXR': 'exr', 'HDR': 'hdr', 
@@ -3719,7 +3767,10 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        return not context.scene.render.is_movie_format
+        if context.scene.render.is_movie_format:
+            cls.poll_message_set("Video file formats are not supported by Loom")
+            return False
+        return True
 
     def pre_render(self, scene, depsgraph):
         self._rendering = True
@@ -3734,7 +3785,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         self._frames.pop(0)
         self._rendering = False
         scene.loom.is_rendering = False
-        
+
     def file_extension(self, file_format):
         return self._image_formats[file_format]
     
@@ -3843,6 +3894,22 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             if frame not in self._rendered_frames:
                 self._rendered_frames.append(frame)
 
+    def validate_comp(self, context):
+        if context.scene.use_nodes:
+            for n in context.scene.node_tree.nodes:
+                if n.type == 'R_LAYERS' and not n.scene.camera:
+                    if not n.mute:
+                        return n.scene.name
+        return None
+
+    def validate_sequencer(self, context):
+        seq = context.scene.sequence_editor
+        for i in seq.sequences_all:
+            if i.type == 'SCENE' and not i.mute:
+                if not seq.channels[i.channel].mute:
+                    return True
+        return False
+
     def log_sequence(self, scene, limit):
         from time import ctime #lum.render_collection.clear()
         lum = scene.loom
@@ -3877,21 +3944,47 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                     mf=i[0], sf=str(i[1]).split(".")[1]) for i in self._skipped_frames)
             else:
                 skipped = ','.join(map(str, self._skipped_frames))
-            self.report({'WARNING'}, "Frame(s) {} skipped (would overwrite existing file(s))".format(skipped))
+            
+            self.report(
+                {'WARNING'}, 
+                "Frame(s): {} skipped (would overwrite existing file(s))".format(skipped))
 
     def execute(self, context):
         scn = context.scene
         prefs = context.preferences
         loom_prefs = prefs.addons[__name__].preferences
         glob_vars = loom_prefs.global_variable_coll
-    
+
         """ Filter user input """
         self._frames = filter_frames(self.frames, scn.frame_step, self.isolate_numbers)
-
         if not self._frames:
             self.report({'INFO'}, "No frames to render")
             return {"CANCELLED"}
-        
+
+        """ Scene validation in case the operator is called via console """
+        if self.validate_scene:
+            if scn.render.use_sequencer and len(scn.sequence_editor.sequences):
+                if self.validate_sequencer(context):
+                    if len(self._frames) > 1 and not self.render_silent:
+                        self.report(
+                            {'INFO'}, 
+                            "Scene Strip(s) in 'Sequencer' detected: " 
+                            "Automatically switched to 'silent' rendering...")
+                        self.render_silent = True
+            else:
+                if scn.render.use_compositing and scn.use_nodes:
+                    rlyr = self.validate_comp(context)
+                    if rlyr is not None:
+                        self.report(
+                            {'WARNING'}, 
+                            "No camera assigned in '{}' "
+                            "scene (used in comp).".format(rlyr))
+                        return {"CANCELLED"}
+                else:
+                    if not scn.camera:
+                        self.report({'WARNING'}, "No camera in scene.")
+                        return {"CANCELLED"}
+
         if not self.render_silent:
             self.report({'INFO'}, "Rendering Image Sequence...\n")
 
@@ -5547,8 +5640,9 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         layout.separator()
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
-        if bpy.app.version < (3, 0, 0): # Test again, if released
-            layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
+        layout.operator(LOOM_OT_rename_dialog.bl_idname, icon="SORTALPHA")
+        #if bpy.app.version < (3, 0, 0): # Test again, if released
+        layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
 
 def draw_loom_render_menu(self, context):
     layout = self.layout
@@ -5970,10 +6064,7 @@ def register():
     bpy.types.PROPERTIES_HT_header.append(draw_loom_render_presets)
     bpy.types.LOOM_PT_render_presets.append(draw_loom_preset_flags) 
     bpy.types.LOOM_PT_render_presets.prepend(draw_loom_preset_header)
-    if bpy.app.version >= (3, 0, 0):
-        bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
-    else:
-        bpy.types.TOPBAR_MT_app.append(draw_loom_project)
+    bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
 
 
 def unregister():
@@ -5988,10 +6079,7 @@ def unregister():
     bpy.types.PROPERTIES_HT_header.remove(draw_loom_render_presets)
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_flags)
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_header)
-    if bpy.app.version >= (3, 0, 0):
-        bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
-    else:
-        bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
+    bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
     
     from bpy.utils import unregister_class
     for cls in reversed(classes):
