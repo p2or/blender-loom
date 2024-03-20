@@ -1171,20 +1171,21 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
     def check(self, context):
         return True
     
-    def detect_scene_strip(self, context):
+    def validate_comp(self, context):
+        if context.scene.use_nodes:
+            for n in context.scene.node_tree.nodes:
+                if n.type == 'R_LAYERS' and not n.scene.camera:
+                    if not n.mute:
+                        return n.scene.name
+        return None
+
+    def validate_sequencer(self, context):
         seq = context.scene.sequence_editor
         for i in seq.sequences_all:
             if i.type == 'SCENE' and not i.mute:
                 if not seq.channels[i.channel].mute:
                     return True
         return False
-
-    def validate_rlayers(self, context):
-        for n in context.scene.node_tree.nodes:
-            if n.type == 'R_LAYERS' and not n.scene.camera:
-                if not n.mute:
-                    return n.scene.name
-        return None
 
     def write_permission(self, folder): # Hacky, but ok for now
         # https://stackoverflow.com/q/2113427/3091066
@@ -1220,28 +1221,27 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         
         """ Scene validation """
         if len(scn.sequence_editor.sequences):
-            if self.detect_scene_strip(context):
+            if self.validate_sequencer(context):
                 if not user_input.isdigit():
                     self.report(
                         {'INFO'}, 
                         "Scene Strip(s) in 'Sequencer' detected: " 
-                        "switched to commandline rendering...")
+                        "Switched to commandline rendering...")
                     lum.command_line = True
         else:
             if scn.use_nodes:
-                rlyr = self.validate_rlayers(context)
+                rlyr = self.validate_comp(context)
                 if rlyr is not None:
                     self.report(
                         {'WARNING'}, 
-                        "No active camera assigned to '{}' " 
-                        "(used in comp).".format(rlyr))
+                        "No camera assigned in '{}' " 
+                        "scene (used in comp).".format(rlyr))
                     user_error = True
             else:
                 if not scn.camera:
                     self.report({'WARNING'}, "No active camera.")
                     user_error = True
         
-        """ Basic tests passed """
         if user_error: #bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
         
@@ -3869,20 +3869,21 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             if frame not in self._rendered_frames:
                 self._rendered_frames.append(frame)
 
-    def detect_scene_strip(self, context):
+    def validate_comp(self, context):
+        if context.scene.use_nodes:
+            for n in context.scene.node_tree.nodes:
+                if n.type == 'R_LAYERS' and not n.scene.camera:
+                    if not n.mute:
+                        return n.scene.name
+        return None
+
+    def validate_sequencer(self, context):
         seq = context.scene.sequence_editor
         for i in seq.sequences_all:
             if i.type == 'SCENE' and not i.mute:
                 if not seq.channels[i.channel].mute:
                     return True
         return False
-
-    def validate_rlayers(self, context):
-        for n in context.scene.node_tree.nodes:
-            if n.type == 'R_LAYERS' and not n.scene.camera:
-                if not n.mute:
-                    return n.scene.name
-        return None
 
     def log_sequence(self, scene, limit):
         from time import ctime #lum.render_collection.clear()
@@ -3938,29 +3939,27 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         """ Scene validation in case the operator is called via console """
         if self.validate_scene:
             if len(scn.sequence_editor.sequences):
-                if self.detect_scene_strip(context):
+                if self.validate_sequencer(context):
                     if len(self._frames) > 1 and not self.render_silent:
                         self.report(
-                            {'WARNING'}, 
-                            "Scene Strip(s) in 'Sequencer' detected: "
-                            "either use the commandline operator or "
-                            "pass 'render_silent=True' in order to "
-                            "render multiple frames.")
-                        return {"CANCELLED"}
+                            {'INFO'}, 
+                            "Scene Strip(s) in 'Sequencer' detected: " 
+                            "Automatically switched to silent rendering...")
+                        self.render_silent = True
             else:
                 if scn.use_nodes:
-                    rlyr = self.validate_rlayers(context)
+                    rlyr = self.validate_comp(context)
                     if rlyr is not None:
                         self.report(
                             {'WARNING'}, 
-                            "No active camera assigned to '{}' (used in comp).".format(rlyr))
+                            "No camera assigned in '{}' "
+                            "scene (used in comp).".format(rlyr))
                         return {"CANCELLED"}
                 else:
                     if not scn.camera:
                         self.report({'WARNING'}, "No camera in scene.")
                         return {"CANCELLED"}
 
-        """ Basic tests passed """
         if not self.render_silent:
             self.report({'INFO'}, "Rendering Image Sequence...\n")
 
