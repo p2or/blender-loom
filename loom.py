@@ -39,8 +39,8 @@ bl_info = {
     "name": "Loom",
     "description": "Image sequence rendering, encoding and playback",
     "author": "Christian Brinkmann (p2or)",
-    "version": (0, 9, 1),
-    "blender": (2, 82, 0),
+    "version": (0, 9, 3),
+    "blender": (3, 6, 0),
     "doc_url": "https://github.com/p2or/blender-loom",
     "tracker_url": "https://github.com/p2or/blender-loom/issues",
     "support": "COMMUNITY",
@@ -626,8 +626,8 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
             wp.url = "https://en.wikipedia.org/wiki/Xterm"
 
             """ Linux/OSX specific properties """
-            if platform.startswith('win32'):
-                rsh.enabled = False
+            #if not platform.startswith('win32'):
+            #    rsh.enabled = False
 
             """ OSX specific properties """
             if platform.startswith('darwin'):
@@ -981,6 +981,12 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         name="Note",
         description="Stores the value of the stamp note")
 
+    flipbook_flag: bpy.props.BoolProperty(
+        name="Render Flipbook",
+        description="Render the Contents of the Viewport",
+        default=False,
+        options={'SKIP_SAVE'})
+
 # -------------------------------------------------------------------
 #    UI Operators
 # -------------------------------------------------------------------
@@ -1176,6 +1182,22 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
     def check(self, context):
         return True
     
+    def validate_comp(self, context):
+        if context.scene.use_nodes:
+            for n in context.scene.node_tree.nodes:
+                if n.type == 'R_LAYERS' and not n.scene.camera:
+                    if not n.mute:
+                        return n.scene.name
+        return None
+
+    def validate_sequencer(self, context):
+        seq = context.scene.sequence_editor
+        for i in seq.sequences_all:
+            if i.type == 'SCENE' and not i.mute:
+                if not seq.channels[i.channel].mute:
+                    return True
+        return False
+
     def write_permission(self, folder): # Hacky, but ok for now
         # https://stackoverflow.com/q/2113427/3091066
         try: # os.access(os.path.realpath(bpy.path.abspath(out_folder)), os.W_OK)
@@ -1196,7 +1218,6 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
 
         """ Error handling """
         user_error = False
-
         if not self.options.is_invoke:
             user_error = True
 
@@ -1204,20 +1225,38 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             self.report({'ERROR'}, "Blend-file not saved.")
             bpy.ops.wm.save_as_mainfile('INVOKE_DEFAULT')
             user_error = True
-        
-        if not scn.camera:
-            self.report({'WARNING'}, "No camera in scene.")
-            user_error = True
-            if scn.use_nodes:
-                user_error = False
 
         if not user_input and not any(char.isdigit() for char in user_input):
             self.report({'ERROR'}, "No frames to render.")
             user_error = True
-
+        
+        """ Scene validation """
+        if scn.render.use_sequencer and len(scn.sequence_editor.sequences):
+            if self.validate_sequencer(context):
+                if not user_input.isdigit():
+                    self.report(
+                        {'INFO'}, 
+                        "Scene Strip(s) in 'Sequencer' detected: " 
+                        "Switched to Command Line rendering...")
+                    lum.command_line = True
+        else:
+            if scn.render.use_compositing and scn.use_nodes:
+                rlyr = self.validate_comp(context)
+                if rlyr is not None:
+                    self.report(
+                        {'WARNING'}, 
+                        "No camera assigned in '{}' " 
+                        "scene (used in comp).".format(rlyr))
+                    user_error = True
+            else:
+                if not scn.camera:
+                    self.report({'WARNING'}, "No active camera.")
+                    user_error = True
+        
         if user_error: #bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
             return {"CANCELLED"}
-
+        
+        """ Tests passed """
         if not lum.override_render_settings:
             lum.property_unset("custom_render_presets")
             
@@ -1228,12 +1267,13 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
                 frames = user_input,
                 threads = lum.threads,
                 isolate_numbers = filter_individual_numbers,
-                render_preset=lum.custom_render_presets)
+                render_preset = lum.custom_render_presets)
         else:
             bpy.ops.render.image_sequence(
                 frames = user_input, 
                 isolate_numbers = filter_individual_numbers,
-                render_silent = False)
+                render_silent = False,
+                validate_scene = False)
         return {"FINISHED"}
 
     def invoke(self, context, event):
@@ -1249,7 +1289,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             bpy.ops.loom.verify_terminal()
         if not lum.is_property_set("threads") or not lum.threads:
             lum.threads = scn.render.threads  # *.5
-        
+
         return context.window_manager.invoke_props_dialog(self, 
             width=(prefs.render_dialog_width))
 
@@ -1289,7 +1329,7 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         else:
             hlp = row.operator(LOOM_OT_openURL.bl_idname, icon='HELP', text="", emboss=False)
             hlp.description = "Open Loom Documentation on Github"
-            hlp.url = "https://github.com/p2or/blender-loom"
+            hlp.url = bl_info["doc_url"]
 
         if lum.command_line:
             row = layout.row(align=True)
@@ -1323,14 +1363,24 @@ class LOOM_OT_render_input_dialog(bpy.types.Operator):
     bl_options = {'INTERNAL'}
 
     frame_input: bpy.props.StringProperty()
+    flipbook_dialog: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    operator_description: bpy.props.StringProperty()
+
+    @classmethod
+    def description(cls, context, properties):
+        if properties.operator_description: #return self.__doc__
+            return properties.operator_description
 
     def execute(self, context):
-        if self.frame_input:
-            context.scene.loom.frame_input = self.frame_input
-            bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
-            return {'FINISHED'}
-        else:
+        if not self.frame_input:
             return {'CANCELLED'}
+        
+        context.scene.loom.frame_input = self.frame_input
+        if self.flipbook_dialog:
+            bpy.ops.loom.render_flipbook('INVOKE_DEFAULT')
+        else:    
+            bpy.ops.loom.render_dialog('INVOKE_DEFAULT')
+        return {'FINISHED'}
         
 
 class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
@@ -1342,6 +1392,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     limit_to_object_selection: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     limit_to_scene_frames: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     all_keyframes: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
+    flipbook_dialog: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
     
     def int_filter(self, flt):
         try:
@@ -1431,7 +1482,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
 
     def execute(self, context):
         space = context.space_data
-
+        
         selected_keys = None
         if space.type == 'DOPESHEET_EDITOR':
             mode = context.space_data.mode
@@ -1482,7 +1533,10 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
                 self.report({'ERROR'}, "No frames keyframes in scene range")
                 return {"CANCELLED"}
 
-        bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(frames))
+        bpy.ops.loom.render_input_dialog(
+            frame_input=self.rangify_frames(frames),
+            flipbook_dialog=self.flipbook_dialog
+            )
         return {'FINISHED'}
 
 
@@ -1493,6 +1547,7 @@ class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     all_markers: bpy.props.BoolProperty(options={'SKIP_SAVE'})
+    flipbook_dialog: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE'})
 
     def rangify_frames(self, frames):
         """ Converts a list of integers to range string [1,2,3] -> '1-3' """
@@ -1518,12 +1573,16 @@ class LOOM_OT_selected_makers_dialog(bpy.types.Operator):
 
         if not markers:
             if not self.all_markers:
-                self.report({'ERROR'}, "Select any Marker to add or enable 'All Markers'.")
+                self.report({'ERROR'}, "Select any Marker to render or enable 'All Markers'.")
             else:
-                self.report({'ERROR'}, "No Markers to add.")
+                self.report({'ERROR'}, "No Markers to render.")
             return {"CANCELLED"}
 
-        bpy.ops.loom.render_input_dialog(frame_input=self.rangify_frames(markers))
+        bpy.ops.loom.render_input_dialog(
+            frame_input=self.rangify_frames(markers),
+            flipbook_dialog=self.flipbook_dialog
+            )
+
         return {'FINISHED'}
 
 
@@ -1574,7 +1633,7 @@ class LOOM_MT_display_settings(bpy.types.Menu):
             layout.prop(prefs, "batch_path_col_width")
         else:
             layout.prop(prefs, "batch_name_col_width")
-        layout.operator("loom.batch_dialog_reset_display", icon="ANIM")
+        layout.operator(LOOM_OT_batch_dialog_reset.bl_idname, icon="ANIM")
 
 
 class LOOM_UL_batch_list(bpy.types.UIList):
@@ -1588,18 +1647,27 @@ class LOOM_UL_batch_list(bpy.types.UIList):
         else:
             split = layout.split(factor=prefs.batch_name_col_width, align=True)
             split_left = split.split(factor=0.1)
-            split_left.operator("loom.batch_default_frames", text="{:02d}".format(index+1), emboss=False).item_id = index
+            split_left.operator(
+                LOOM_OT_batch_default_range.bl_idname,
+                text="{:02d}".format(index+1), 
+                emboss=False).item_id = index
             split_left.label(text=item.name, icon='FILE_BLEND')
             
         split_right = split.split(factor=.99)
         row = split_right.row(align=True)
-        row.operator("loom.batch_default_frames", icon="PREVIEW_RANGE", text="").item_id = index
+        row.operator(
+            LOOM_OT_batch_default_range.bl_idname, 
+            icon="PREVIEW_RANGE", 
+            text="").item_id = index
         row.prop(item, "frames", text="") #, icon='IMAGEFILE'
         #row = split_right.row(align=True) #row.prop(item, "input_filter", text="", icon='FILTER')
         row.prop(item, "input_filter", text="", icon='FILTER')
 
         row.prop(item, "encode_flag", text="", icon='FILE_MOVIE')
-        row.operator("loom.batch_verify_input", text="", icon='GHOST_ENABLED').item_id = index
+        row.operator(
+            LOOM_OT_batch_verify_input.bl_idname, 
+            text="", 
+            icon='GHOST_ENABLED').item_id = index
         row.separator()
         row.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(item.path)
@@ -3543,7 +3611,7 @@ class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
 
 
 class LOOM_OT_open_preferences(bpy.types.Operator):
-    """Loom Preferences Window"""
+    """Preferences Window"""
     bl_idname = "loom.open_preferences"
     bl_label = "Loom Preferences"
     bl_options = {'INTERNAL'}
@@ -3686,6 +3754,11 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         name="Render Preset",
         description="Pass a custom Preset.py")
 
+    validate_scene: bpy.props.BoolProperty(
+        name="Scene Validation",
+        description="Sequencer Strips, Active Camera etc.",
+        default=True)
+
     _image_formats = {'BMP': 'bmp', 'IRIS': 'iris', 'PNG': 'png', 'JPEG': 'jpg', 
         'JPEG2000': 'jp2', 'TARGA': 'tga', 'TARGA_RAW': 'tga', 'CINEON': 'cin', 
         'DPX': 'dpx', 'OPEN_EXR_MULTILAYER': 'exr', 'OPEN_EXR': 'exr', 'HDR': 'hdr', 
@@ -3699,7 +3772,10 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        return not context.scene.render.is_movie_format
+        if context.scene.render.is_movie_format:
+            cls.poll_message_set("Video file formats are not supported by Loom")
+            return False
+        return True
 
     def pre_render(self, scene, depsgraph):
         self._rendering = True
@@ -3714,7 +3790,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         self._frames.pop(0)
         self._rendering = False
         scene.loom.is_rendering = False
-        
+
     def file_extension(self, file_format):
         return self._image_formats[file_format]
     
@@ -3823,6 +3899,22 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             if frame not in self._rendered_frames:
                 self._rendered_frames.append(frame)
 
+    def validate_comp(self, context):
+        if context.scene.use_nodes:
+            for n in context.scene.node_tree.nodes:
+                if n.type == 'R_LAYERS' and not n.scene.camera:
+                    if not n.mute:
+                        return n.scene.name
+        return None
+
+    def validate_sequencer(self, context):
+        seq = context.scene.sequence_editor
+        for i in seq.sequences_all:
+            if i.type == 'SCENE' and not i.mute:
+                if not seq.channels[i.channel].mute:
+                    return True
+        return False
+
     def log_sequence(self, scene, limit):
         from time import ctime #lum.render_collection.clear()
         lum = scene.loom
@@ -3847,7 +3939,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             else:
                 rendered = ','.join(map(str, self._rendered_frames))
             self.report({'INFO'}, "{} {} rendered.".format(
-                "Frames:" if frame_count > 1 else "Frame:", rendered))
+                "Frames" if frame_count > 1 else "Frame", rendered))
             self.report({'INFO'}, "{} saved to {}".format(
                 "Images" if frame_count > 1 else "Image", self._folder))
                 
@@ -3857,21 +3949,47 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                     mf=i[0], sf=str(i[1]).split(".")[1]) for i in self._skipped_frames)
             else:
                 skipped = ','.join(map(str, self._skipped_frames))
-            self.report({'WARNING'}, "Frame(s): {} skipped (would overwrite existing file(s))".format(skipped))
+            
+            self.report(
+                {'WARNING'}, 
+                "Frame(s): {} skipped (would overwrite existing file(s))".format(skipped))
 
     def execute(self, context):
         scn = context.scene
         prefs = context.preferences
         loom_prefs = prefs.addons[__name__].preferences
         glob_vars = loom_prefs.global_variable_coll
-    
+
         """ Filter user input """
         self._frames = filter_frames(self.frames, scn.frame_step, self.isolate_numbers)
-
         if not self._frames:
             self.report({'INFO'}, "No frames to render")
             return {"CANCELLED"}
-        
+
+        """ Scene validation in case the operator is called via console """
+        if self.validate_scene:
+            if scn.render.use_sequencer and len(scn.sequence_editor.sequences):
+                if self.validate_sequencer(context):
+                    if len(self._frames) > 1 and not self.render_silent:
+                        self.report(
+                            {'INFO'}, 
+                            "Scene Strip(s) in 'Sequencer' detected: " 
+                            "Automatically switched to 'silent' rendering...")
+                        self.render_silent = True
+            else:
+                if scn.render.use_compositing and scn.use_nodes:
+                    rlyr = self.validate_comp(context)
+                    if rlyr is not None:
+                        self.report(
+                            {'WARNING'}, 
+                            "No camera assigned in '{}' "
+                            "scene (used in comp).".format(rlyr))
+                        return {"CANCELLED"}
+                else:
+                    if not scn.camera:
+                        self.report({'WARNING'}, "No camera in scene.")
+                        return {"CANCELLED"}
+
         if not self.render_silent:
             self.report({'INFO'}, "Rendering Image Sequence...\n")
 
@@ -3981,6 +4099,316 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                     self.start_render(scn, frame_number, silent=False)
 
         return {"PASS_THROUGH"}
+
+
+class LOOM_OT_render_flipbook(bpy.types.Operator):
+    """Render the Contents of the Viewport"""
+    bl_idname = "loom.render_flipbook"
+    bl_label = "Render Flipbook Animation"
+    bl_options = {'REGISTER'}
+
+    frames: bpy.props.StringProperty(
+        name="Frames",
+        description="Specify a range or frames to render")
+    
+    digits: bpy.props.IntProperty(
+        name="Digits",
+        description="Specify digits in filename",
+        default=4)
+
+    isolate_numbers: bpy.props.BoolProperty(
+        name="Filter Raw Items",
+        description="Filter raw elements in frame input",
+        default=False)
+    
+    keep_overlays: bpy.props.BoolProperty(
+        name="Keep Overlays",
+        description="Do not turn off overlays while rendering",
+        default=False,
+        options={'SKIP_SAVE'})
+
+    open_render_folder: bpy.props.BoolProperty(
+        name="Open Render Folder",
+        description="Open up the system folder when done",
+        default=False,
+        options={'SKIP_SAVE'})
+
+    _image_formats = {'BMP': 'bmp', 'IRIS': 'iris', 'PNG': 'png', 'JPEG': 'jpg', 
+        'JPEG2000': 'jp2', 'TARGA': 'tga', 'TARGA_RAW': 'tga', 'CINEON': 'cin', 
+        'DPX': 'dpx', 'OPEN_EXR_MULTILAYER': 'exr', 'OPEN_EXR': 'exr', 'HDR': 'hdr', 
+        'TIFF': 'tif', 'WEBP': 'webp', 'SUPPLEMENT1': 'tiff', 'SUPPLEMENT2': 'jpeg'}
+    
+    _rendered_frames, _skipped_frames = [], []
+    _frames = _dec = _log = _output_path = _folder = _filename = _extension = None
+    _subframe_flag = _overlays_state = _gizmos_state = False
+
+    @classmethod
+    def poll(cls, context):
+        return not context.scene.render.is_movie_format
+    
+    def shading_type_order(self):
+        d = {}
+        for c, i in enumerate(bpy.types.View3DShading.bl_rna.properties['type'].enum_items):
+            d[i.identifier] = c #print(i.identifier, i.name, i.description, i.icon)
+        return d
+    
+    def predict_viewport(self, context):
+        area = context.area
+        if area.type != 'VIEW_3D':
+            viewport_areas = []            
+            for a in context.screen.areas:
+                if a.type=='VIEW_3D':
+                    viewport_areas.append(a)
+            if not viewport_areas:
+                return None
+            highest_shading_type = 0
+            sto = self.shading_type_order()
+            for v in viewport_areas:
+                sh = sto[v.spaces.active.shading.type]
+                if sh > highest_shading_type:
+                    highest_shading_type = sh
+                    area = v
+        return area
+
+    def gizmos(self, area, state):
+        if area.type == 'VIEW_3D':
+            area.spaces[0].show_gizmo = state
+
+    def overlays(self, area, state):
+        if area.type == 'VIEW_3D':
+            area.spaces[0].overlay.show_overlays = state
+
+    def in_camera(self, area):
+        return area.spaces[0].region_3d.view_perspective == 'CAMERA'
+
+    def file_extension(self, file_format):
+        return self._image_formats[file_format]
+
+    def subframes(self, sub_frames):
+        subs = []
+        for frame in sub_frames:
+            main_frame, sub_frame = repr(frame).split('.')
+            subs.append((int(main_frame), float('.' + sub_frame)))
+        return subs
+
+    def format_frame(self, file_name, frame, extension=None):
+        file_name = replace_globals(file_name)
+        if extension:
+            return "{f}{fn:0{lz}d}.{ext}".format(
+                f=file_name, fn=frame, lz=self.digits, ext=extension)
+        else:
+            return "{f}{fn:0{lz}d}_".format(
+                f=file_name, fn=frame, lz=self.digits)
+    
+    def format_subframe(self, file_name, frame, extension=None):
+        file_name = replace_globals(file_name)
+        sub_frame = "{sf:.{dec}f}".format(sf = frame[1], dec=self._dec).split('.')[1]
+        if extension:
+            return "{f}{mf:0{lz}d}{sf}.{ext}".format(
+                f=file_name, mf=frame[0], lz=self.digits, 
+                sf=sub_frame, ext=extension)
+        else:
+            return "{f}{mf:0{lz}d}{sf}_".format(
+                f=file_name, mf=frame[0], lz=self.digits, sf=sub_frame)
+
+    def safe_filename(self, file_name):
+        if file_name:
+            if file_name.lower().endswith(tuple(self._image_formats.values())):
+                name_real, ext = os.path.splitext(file_name)
+            else:
+                name_real = file_name
+            if "#" in name_real:
+                hashes = re.findall("#+$", name_real)
+                name_real = re.sub("#", '', name_real)
+                self.digits = len(hashes[0]) if hashes else 4
+            return name_real + "_" if name_real and name_real[-1].isdigit() else name_real
+        
+        else: # If filename not specified, use blend-file name instead
+            blend_name, ext = os.path.splitext(os.path.basename(bpy.data.filepath))
+            return blend_name + "_"
+
+    def frame_repath(self, scene, frame_number):
+        ''' Set the frame, assamble main file and output node paths '''
+        if self._subframe_flag:
+            scene.frame_set(frame_number[0], subframe=frame_number[1])
+            ff = self.format_subframe(self._filename, frame_number, self._extension)
+        else:
+            scene.frame_set(frame_number)
+            ff = self.format_frame(self._filename, frame_number, self._extension)
+        
+        scene.render.filepath = os.path.join(self._folder, ff)
+
+    def log_sequence(self, scene, limit):
+        from time import ctime #lum.render_collection.clear()
+        lum = scene.loom
+        if len(lum.render_collection) == limit:
+            lum.render_collection.remove(0)
+        render = lum.render_collection.add()
+        render.render_id = len(lum.render_collection)
+        render.start_time = ctime()
+        render.start_frame = str(self._frames[0])
+        render.end_frame = str(self._frames[-1])
+        render.name = self._filename
+        render.file_path = self._output_path
+        render.padded_zeros = self.digits if not self._dec else self.digits + self._dec
+        render.image_format = self._extension
+
+    def reset_output_path(self, scene):
+        scene.render.filepath = self._output_path
+
+    def final_report(self):
+        if self._rendered_frames:
+            frame_count = len(self._rendered_frames)
+            if isinstance(self._rendered_frames[0], tuple):
+                rendered = ', '.join("{mf}.{sf}".format(
+                    mf=i[0], sf=str(i[1]).split(".")[1]) for i in self._rendered_frames)
+            else:
+                rendered = ','.join(map(str, self._rendered_frames))
+            
+            self.report({'INFO'}, "{} {} rendered.".format(
+                "Frames" if frame_count > 1 else "Frame", rendered))
+            self.report({'INFO'}, "{} saved to {}".format(
+                "Images" if frame_count > 1 else "Image", self._folder))
+                
+        if self._skipped_frames:
+            if isinstance(self._skipped_frames[0], tuple):
+                skipped = ', '.join("{mf}.{sf}".format(
+                    mf=i[0], sf=str(i[1]).split(".")[1]) for i in self._skipped_frames)
+            else:
+                skipped = ','.join(map(str, self._skipped_frames))
+            self.report({'ERROR'}, "Frame(s) {} skipped (would overwrite existing file(s))".format(skipped))
+
+    def execute(self, context):
+        scn = context.scene
+        prefs = context.preferences.addons[__name__].preferences
+        glob_vars = prefs.global_variable_coll
+
+        """ Filter user input """
+        self._frames = filter_frames(self.frames, scn.frame_step, self.isolate_numbers)
+        if not self._frames:
+            self.report({'ERROR'}, "No frames to render")
+            return {"CANCELLED"}
+        
+        """ Viewport reference """
+        area = self.predict_viewport(context)
+        if not area:
+            self.report({'ERROR'}, "No viewport to render")
+            return {'CANCELLED'}
+
+        """ Handle overlay states """
+        self._overlays_state = area.spaces[0].overlay.show_overlays
+        #self._gizmos_state = area.spaces[0].overlay.show_overlays
+        self.overlays(area, self.keep_overlays)
+
+        """ Main output path """        
+        self._output_path = scn.render.filepath
+        output_folder, self._filename = os.path.split(bpy.path.abspath(self._output_path))
+        self._folder = os.path.realpath(output_folder)        
+        self._extension = self.file_extension(scn.render.image_settings.file_format)
+        self._filename = self.safe_filename(self._filename)
+
+        if any(ext in self._folder for ext in glob_vars.keys()):
+            self._folder = replace_globals(self._folder)
+            bpy.ops.loom.create_directory(directory=self._folder)
+            if not os.path.isdir(self._folder):
+                self.report({'INFO'}, "Specified folder can not be created")
+                return {"CANCELLED"}
+        
+        """ Determine whether given frames are subframes """
+        if isinstance(self._frames[0], float):
+            self._frames = self.subframes(self._frames)
+            self._dec = max(map(lambda x: len(str(x[1]).split('.')[1]), self._frames))
+            self._subframe_flag = True
+
+        """ Logging """
+        self._skipped_frames.clear(), self._rendered_frames.clear()
+        if prefs.log_render: self.log_sequence(scn, prefs.log_render_limit)
+
+        """ Display the rendering progress """
+        wm = context.window_manager
+        wm.progress_begin(0, len(self._frames))
+
+        """ Start the rendering """
+        for c, f in enumerate(self._frames):
+            self.frame_repath(scn, f)
+            wm.progress_update(c)
+            if not scn.render.use_overwrite and os.path.isfile(scn.render.filepath):
+                self._skipped_frames.append(f)
+                continue
+
+            with context.temp_override(area=area):
+                bpy.ops.render.opengl(write_still=True)
+
+            if f not in self._rendered_frames:
+                self._rendered_frames.append(f)
+
+        """ Reset output path and overlay states """
+        wm.progress_end()
+        self.overlays(area, self._overlays_state)
+        self.final_report()
+        self.reset_output_path(scn)
+
+        """ Open up the folder """
+        if self.open_render_folder:
+            prefs = context.preferences.addons[__name__].preferences
+            glob_vars = prefs.global_variable_coll
+
+            output_folder, filename = os.path.split(bpy.path.abspath(scn.render.filepath))
+            rndr_folder = os.path.realpath(output_folder)
+            if any(ext in rndr_folder for ext in glob_vars.keys()):
+                rndr_folder = replace_globals(rndr_folder)
+
+            bpy.ops.loom.open_folder(
+                folder_path=rndr_folder)
+        
+        return {"FINISHED"}
+
+    def draw(self, context):
+        scn = context.scene
+        lum = scn.loom
+        layout = self.layout
+        split_factor = .17
+
+        split = layout.split(factor=split_factor)
+        col = split.column(align=True)
+        col.label(text="Frames:")
+        col = split.column(align=True)
+        sub = col.row(align=True)
+        sub.operator(LOOM_OT_guess_frames.bl_idname, icon='PREVIEW_RANGE', text="")
+        sub.prop(lum, "frame_input", text="")
+        sub.prop(lum, "filter_input", icon='FILTER', icon_only=True)
+        sub.operator(LOOM_OT_verify_frames.bl_idname, icon='GHOST_ENABLED', text="")       
+
+        # current/bpy.types.PreferencesSystem.html#bpy.types.PreferencesSystem.viewport_aa
+        split = layout.split(factor=split_factor) # prop(pref_system, "viewport_aa")
+        split.label(text="Settings:")#Anti-Aliasing:
+        row = split.row(align=True)
+        row.prop(self, "keep_overlays", toggle=True, icon='OVERLAY', text="")
+        row.prop(context.preferences.system, "viewport_aa", text="")
+        #row.prop(context.preferences.system, "anisotropic_filter", text="")
+        #row = layout.row(align=True)
+
+        row = layout.row(align=True)    
+        row.prop(self, "open_render_folder", text="Open render folder when done")
+
+        hlp = row.operator(LOOM_OT_openURL.bl_idname, icon='HELP', text="", emboss=False)
+        hlp.description = "Open Loom Documentation on Github"
+        hlp.url = bl_info["doc_url"]
+
+    def invoke(self, context, event):
+        scn = context.scene
+        lum = scn.loom
+        prefs = context.preferences.addons[__name__].preferences
+        
+        # Set invoke properties
+        self.frames = lum.frame_input
+        self.open_render_folder = True
+
+        if not lum.is_property_set("frame_input") or not lum.frame_input:
+            bpy.ops.loom.guess_frames(detect_missing_frames=False)
+        
+        return context.window_manager.invoke_props_dialog(self, 
+            width=(prefs.render_dialog_width))
 
 
 # -------------------------------------------------------------------
@@ -5233,16 +5661,20 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         prefs = context.preferences.addons[__name__].preferences
         layout = self.layout
         layout.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE') #RENDER_ANIMATION, SEQ_LUMA_WAVEFORM
-        layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode") 
-        layout.operator(LOOM_OT_encode_dialog.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence")
+        layout.operator(LOOM_OT_batch_dialog.bl_idname, icon='FILE_MOVIE', text="Batch Render and Encode")
+        layout.operator_context = 'INVOKE_DEFAULT' #'INVOKE_AREA'
+        layout.operator(LOOM_OT_render_flipbook.bl_idname, icon='RENDER_RESULT') #SPHERE
         if prefs.playblast_flag:
             layout.operator(LOOM_OT_playblast.bl_idname, icon='PLAY', text="Loom Playblast")
+        layout.separator()
+        layout.operator(LOOM_OT_encode_dialog.bl_idname, icon='RENDER_ANIMATION', text="Encode Image Sequence")
+        layout.operator(LOOM_OT_rename_dialog.bl_idname, icon="SORTALPHA")
         layout.separator()
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
         layout.operator(LOOM_OT_rename_dialog.bl_idname, icon="SORTALPHA")
-        if bpy.app.version < (3, 0, 0): # Test again, if released
-            layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
+        #if bpy.app.version < (3, 0, 0): # Test again, if released
+        layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
 
 def draw_loom_render_menu(self, context):
     layout = self.layout
@@ -5443,31 +5875,40 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
     bl_ui_units_x = 11
 
     def draw(self, context):
+        scn = context.scene
+        lum = scn.loom
         layout = self.layout
-        row = layout.row(align=True)
-        row.operator(LOOM_OT_open_folder.bl_idname, icon="RENDER_STILL", text="", emboss=False).folder_path = "//"
-        row.label(text=" Loom")
+        row = layout.row()
+        #row.operator(LOOM_OT_open_folder.bl_idname, icon="RENDER_STILL", text="", emboss=False).folder_path = "//"
+        row.label(text="Loom", icon="RENDER_STILL")
+        vp_icon = 'RESTRICT_VIEW_OFF' if lum.flipbook_flag else 'RESTRICT_VIEW_ON' #SHADING_RENDERED
+        row.prop(lum, "flipbook_flag", icon=vp_icon, text="", emboss=False) #
         row = layout.row()
 
-        col = layout.column()
-        #col.label(text="Loom", icon='RENDER_STILL')
-        #col = layout.column()
+        col = layout.column() #col.label(text="Loom", icon='RENDER_STILL') #col = layout.column()
         row = col.row(align=True)
-        row.prop(context.scene.loom, "scene_selection", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
+        row.prop(lum, "scene_selection", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
         ka_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, text="Render Selected Keyframes")
-        ka_op.limit_to_object_selection = context.scene.loom.scene_selection
-        #row.prop(context.scene.loom, "scene_range", icon="CON_ACTION", text="")
-        #ka_op.limit_to_scene_frames = context.scene.loom.scene_range
-        
+        ka_op.limit_to_object_selection = lum.scene_selection
+        ka_op.flipbook_dialog = lum.flipbook_flag
+        #row.prop(lum, "scene_range", icon="CON_ACTION", text="")
+        #ka_op.limit_to_scene_frames = lum.scene_range
+        col.separator(factor=0.05) 
         row = col.row(align=True)
-        row.prop(context.scene.loom, "all_markers_flag", icon="TEMP", text="") #"TIME"
-        ma_txt = "Render All Markers" if context.scene.loom.all_markers_flag else "Render Active Markers"
+        row.prop(lum, "all_markers_flag", icon="TEMP", text="") #"TIME"
+        ma_txt = "Render All Markers" if lum.all_markers_flag else "Render Active Markers"
         ma_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=ma_txt) # icon='PMARKER_ACT',
-        ma_op.all_markers = context.scene.loom.all_markers_flag #PMARKER_SEL
+        ma_op.all_markers = lum.all_markers_flag #PMARKER_SEL
+        ma_op.flipbook_dialog = lum.flipbook_flag
 
-        col.separator()
-        col.operator(LOOM_OT_render_dialog.bl_idname, icon='SEQUENCE')
-        col.separator(factor=1.0)
+        col.separator(factor=1.5)
+        txt = "Render Flipbook Animation" if lum.flipbook_flag else "Render Image Sequence"
+        icon = 'RENDER_RESULT' if lum.flipbook_flag else 'SEQUENCE' # RENDER_RESULT, 'SEQ_PREVIEW'
+        di = col.operator(LOOM_OT_render_input_dialog.bl_idname, icon=icon, text=txt)
+        di.flipbook_dialog = lum.flipbook_flag
+        di.frame_input = "{}-{}".format(scn.frame_start, scn.frame_end)
+        di.operator_description = txt
+        col.separator(factor=0.5)
 
 def draw_loom_dopesheet(self, context):
     """Append popover to the dopesheet"""
@@ -5574,6 +6015,7 @@ classes = (
     LOOM_OT_openURL,
     LOOM_OT_render_terminal,
     LOOM_OT_render_image_sequence,
+    LOOM_OT_render_flipbook,
     LOOM_OT_playblast,
     LOOM_OT_clear_dialog,
     LOOM_OT_verify_terminal,
@@ -5626,6 +6068,9 @@ def register():
         kmi = km.keymap_items.new(LOOM_OT_encode_dialog.bl_idname, 'F9', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
+        kmi = km.keymap_items.new(LOOM_OT_render_flipbook.bl_idname, 'F10', 'PRESS', ctrl=True, shift=True)
+        kmi.active = True
+        addon_keymaps.append((km, kmi))
         kmi = km.keymap_items.new(LOOM_OT_batch_dialog.bl_idname, 'F12', 'PRESS', ctrl=True, shift=True, alt=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
@@ -5648,6 +6093,9 @@ def register():
             kmi.active = True
             addon_keymaps.append((km, kmi))
             kmi = km.keymap_items.new(LOOM_OT_encode_dialog.bl_idname, 'F9', 'PRESS', oskey=True, shift=True)
+            kmi.active = True
+            addon_keymaps.append((km, kmi))
+            kmi = km.keymap_items.new(LOOM_OT_render_flipbook.bl_idname, 'F10', 'PRESS', oskey=True, shift=True)
             kmi.active = True
             addon_keymaps.append((km, kmi))
             kmi = km.keymap_items.new(LOOM_OT_batch_dialog.bl_idname, 'F12', 'PRESS', oskey=True, shift=True, alt=True)
@@ -5692,10 +6140,7 @@ def register():
     bpy.types.PROPERTIES_HT_header.append(draw_loom_render_presets)
     bpy.types.LOOM_PT_render_presets.append(draw_loom_preset_flags) 
     bpy.types.LOOM_PT_render_presets.prepend(draw_loom_preset_header)
-    if bpy.app.version >= (3, 0, 0):
-        bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
-    else:
-        bpy.types.TOPBAR_MT_app.append(draw_loom_project)
+    bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
 
 
 def unregister():
@@ -5711,10 +6156,7 @@ def unregister():
     bpy.types.PROPERTIES_HT_header.remove(draw_loom_render_presets)
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_flags)
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_header)
-    if bpy.app.version >= (3, 0, 0):
-        bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
-    else:
-        bpy.types.TOPBAR_MT_app.remove(draw_loom_project)
+    bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
     
     from bpy.utils import unregister_class
     for cls in reversed(classes):
