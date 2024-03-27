@@ -5640,7 +5640,6 @@ class LOOM_MT_render_menu(bpy.types.Menu):
         layout.separator()
         #layout.operator(LOOM_OT_project_dialog.bl_idname, icon="OUTLINER") #PRESET
         layout.operator(LOOM_OT_open_output_folder.bl_idname, icon='FOLDER_REDIRECT')
-        layout.operator(LOOM_OT_rename_dialog.bl_idname, icon="SORTALPHA")
         #if bpy.app.version < (3, 0, 0): # Test again, if released
         layout.operator(LOOM_OT_open_preferences.bl_idname, icon='PREFERENCES', text="Loom Preferences")
 
