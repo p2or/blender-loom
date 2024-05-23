@@ -46,7 +46,8 @@ You can also render **every nth frame** of the scene by adding `x` followed by a
 `1-17x0.25` @25fps *(without motion blur)*
 -->
 
-<img width="700" alt="Loom Slow Motion" src="https://i.stack.imgur.com/wOCMZ.gif"><br>
+
+<img width="700" alt="Loom Slow Motion" src="https://i.sstatic.net/wOCMZ.gif"><br>
 `1-17x0.25` @25fps *(without motion blur)*
 
 
