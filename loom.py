@@ -28,6 +28,7 @@ import webbrowser
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 from bl_operators.presets import AddPresetBase
 from bl_ui.utils import PresetPanel
+from contextlib import suppress
 from numpy import arange, around, isclose
 from itertools import count, groupby
 from time import strftime
@@ -3692,8 +3693,11 @@ class LOOM_OT_render_terminal(bpy.types.Operator):
     def execute(self, context):
         prefs = context.preferences.addons[__name__].preferences
 
-        if bpy.data.is_dirty: # Save latest changes
-            bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
+        if bpy.data.is_dirty: 
+            # Save latest changes and suppress visual errors
+            with suppress(RuntimeError):
+                bpy.ops.wm.save_as_mainfile(
+                    filepath=bpy.data.filepath)
 
         python_expr = ("import bpy;" +\
                 "bpy.ops.render.image_sequence(" +\
