@@ -3888,13 +3888,13 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 print("Skipped frame: {} (already exists)".format(frame))
         else:
             if rndr.use_placeholder and not os.path.isfile(rndr.filepath):
+                os.makedirs(os.path.dirname(rndr.filepath), exist_ok=True)
                 open(rndr.filepath, 'a').close()
             
             if silent:
                 bpy.ops.render.render(write_still=True)
             else:
                 bpy.ops.render.render("INVOKE_DEFAULT", write_still=True)
-
             if frame not in self._rendered_frames:
                 self._rendered_frames.append(frame)
 
