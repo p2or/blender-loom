@@ -871,7 +871,7 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
 
     command_line: bpy.props.BoolProperty(
         name="Render using Command Line",
-        description="Send frames to Command Line (background process)",
+        description="Send frames to command line (background process)",
         default=False)
 
     is_rendering: bpy.props.BoolProperty(
@@ -891,22 +891,22 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
     
     sequence_encode: bpy.props.StringProperty(
         name="Image Sequence",
-        description="Image Sequence",
+        description="Image sequence to encode",
         maxlen=1024)
 
     movie_path: bpy.props.StringProperty(
         name="Movie",
-        description="Movie File output path",
+        description="Movie file output path",
         maxlen=1024)
 
     sequence_rename: bpy.props.StringProperty(
-        name="New Sequence Name",
-        description="New Sequence Name",
+        name="Sequence Name",
+        description="New sequence name for renaming",
         maxlen=1024)
 
     lost_frames: bpy.props.StringProperty(
         name="Missing Frames",
-        description="Missing Frames",
+        description="Missing Frames of the given sequence",
         default="",
         options={'SKIP_SAVE'})
 
@@ -916,7 +916,7 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
 
     batch_scan_folder: bpy.props.StringProperty(
         name="Folder",
-        description="Folder",
+        description="Folder to search for .blend files",
         maxlen=1024)
 
     batch_render_idx: bpy.props.IntProperty(
@@ -929,24 +929,24 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
 
     output_render_version: bpy.props.IntProperty(
         name = "Render Version",
-        description="Render Version",
+        description="Change the given version number within the output path",
         default=1, 
         min=1,
         update=render_version)
 
     output_sync_comp: bpy.props.BoolProperty(
         name="Sync Compositor",
-        description="Sync version string with File Output nodes",
+        description="Keep version number of all file output nodes in sync",
         default=True)
 
     comp_image_settings: bpy.props.BoolProperty(
         name="Display Image Settings",
-        description="Display Image Settings of each File Output Node",
+        description="Display image settings of each file output node",
         default=False)
 
     project_directory: bpy.props.StringProperty(
         name="Project Directory",
-        description="Stores the path to the Project Directory",
+        description="Stores the path to the project directory",
         maxlen=1024)
 
     path_collection: bpy.props.CollectionProperty(
@@ -955,17 +955,17 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
 
     scene_selection: bpy.props.BoolProperty(
         name="Limit by Object Selection",
-        description="Only add Keyframes assigned to the Object(s) in Selection",
+        description="Only add keyframes assigned to the object(s) in selection",
         default=False)
     
     ignore_scene_range: bpy.props.BoolProperty(
         name="Ignore Scene Range",
-        description="Do not take the Frame Range of the Scene into account",
+        description="Do not consider the frame range of the scene",
         default=False)
 
     all_markers_flag: bpy.props.BoolProperty(
         name="All Markers",
-        description="Add all Markers to the list",
+        description="Add all markers to the list",
         default=False)
     
     render_preset_flags: bpy.props.PointerProperty(
@@ -973,13 +973,13 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
 
     custom_render_presets: bpy.props.EnumProperty(
         name="Render Preset",
-        description="Select a Custom Preset",
+        description="Select a custom render preset",
         items=render_preset_callback,
         options={'SKIP_SAVE'})
 
     flipbook_flag: bpy.props.BoolProperty(
         name="Render Flipbook",
-        description="Render the Contents of the Viewport",
+        description="Render the contents of the viewport",
         default=False,
         options={'SKIP_SAVE'})
 
