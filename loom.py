@@ -5557,7 +5557,7 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
                     if not prop.startswith(ignore_attribs):
                         preset_values.append("scene.cycles.{}".format(prop))
                         
-            if bpy.context.scene.render.engine == 'BLENDER_EEVEE':
+            if bpy.context.scene.render.engine in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'):
                 for prop in dir(scene.eevee):
                     if "options" in prop:
                         continue
