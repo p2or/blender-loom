@@ -781,6 +781,18 @@ def render_preset_callback(scene, context):
     return items
 
 
+def render_scene_callback(self, context):
+    items = [('NONE', "Current Scene", "")]
+    if os.path.exists(self.path) and self.scene_override:
+        scene_list = None
+        with bpy.data.libraries.load(self.path) as (data_from, data_to):
+            scene_list = data_from.scenes
+        if scene_list:
+            for s in scene_list:
+                items.append((s, "{}".format(s), ""))
+    return items
+
+
 class LOOM_PG_render(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
     render_id: bpy.props.IntProperty()
@@ -801,6 +813,8 @@ class LOOM_PG_batch_render(bpy.types.PropertyGroup):
     scene: bpy.props.StringProperty()
     frames: bpy.props.StringProperty(name="Frames")
     encode_flag: bpy.props.BoolProperty(default=False)
+    scene_override: bpy.props.BoolProperty(default=False)
+    scene_selection: bpy.props.EnumProperty(items=render_scene_callback)
     input_filter: bpy.props.BoolProperty(default=False)
 
 
@@ -1650,7 +1664,7 @@ class LOOM_UL_batch_list(bpy.types.UIList):
             split_left.label(text=item.name, icon='FILE_BLEND')
             
         split_right = split.split(factor=.99)
-        row = split_right.row(align=True)
+        row = split_right.row(align=True)        
         row.operator(
             LOOM_OT_batch_default_range.bl_idname, 
             icon="PREVIEW_RANGE", 
@@ -1664,6 +1678,10 @@ class LOOM_UL_batch_list(bpy.types.UIList):
             LOOM_OT_batch_verify_input.bl_idname, 
             text="", 
             icon='GHOST_ENABLED').item_id = index
+        row.separator()
+        row.prop(item, "scene_override", text="", icon='SCENE_DATA')
+        if item.scene_override:
+            row.prop(item, "scene_selection", text="")
         row.separator()
         row.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(item.path)
@@ -1848,9 +1866,11 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             
             python_expr += ");"
             python_expr += "bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)"
-            #print(type(python_expr), python_expr, self.render_preset)
 
-            cli_args = [bl_bin, "-b", item.path, "--python-expr", python_expr]
+            cli_args = [bl_bin, "-b", item.path] 
+            if item.scene_override and item.scene_selection != 'NONE':
+                cli_args.extend(["-S", '"{}"'.format(item.scene_selection)])
+            cli_args.extend(["--python-expr", python_expr])
             cli_arg_dict[c] = cli_args
 
         coll_len = len(cli_arg_dict)
@@ -1916,6 +1936,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         col = row.column(align=True)
         col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon='ADD', text="")
         col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
+        col.operator(LOOM_OT_batch_list_actions.bl_idname, icon='DUPLICATE', text="").action = 'DUPE'
         col.menu(LOOM_MT_display_settings.bl_idname, icon='DOWNARROW_HLT', text="")
         col.separator()
         col.separator()
@@ -2327,7 +2348,8 @@ class LOOM_OT_batch_list_actions(bpy.types.Operator):
             ('UP', "Up", ""),
             ('DOWN', "Down", ""),
             ('REMOVE', "Remove", ""),
-            ('ADD', "Add", "")))
+            ('ADD', "Add", ""),
+            ('DUPE', "Duplicate", "")))
 
     def invoke(self, context, event):
         scn = context.scene
@@ -2354,6 +2376,17 @@ class LOOM_OT_batch_list_actions(bpy.types.Operator):
                 if lum.batch_render_idx < 0: lum.batch_render_idx = 0
                 self.report({'INFO'}, info)
                 lum.batch_render_coll.remove(idx)
+
+            elif self.action == 'DUPE':
+                dupe = lum.batch_render_coll.add()
+                dupe.rid = len(lum.batch_render_coll) + 1
+                dupe.name = item.name
+                dupe.path = item.path 
+                dupe.frame_start = item.frame_start
+                dupe.frame_end = item.frame_end
+                dupe.scene = item.scene
+                dupe.frames = item.frames
+                lum.batch_render_idx = len(lum.batch_render_coll)-1
 
         if self.action == 'ADD':
             bpy.ops.loom.batch_select_blends('INVOKE_DEFAULT')       
