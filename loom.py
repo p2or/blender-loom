@@ -2002,6 +2002,11 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
         description="Overwrite existing files",
         default=False)
     
+    convert_paths: bpy.props.BoolProperty(
+        name="Convert Output Paths",
+        description="Convert all output paths to absolute paths",
+        default=True)
+    
     apply_globals: bpy.props.BoolProperty(
         name="Apply Globals",
         default=False)
@@ -2079,10 +2084,16 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
         ''' Save a copy and add it to Loom Batch '''
         if os.path.exists(basedir) and fcopy is not None:
             
+            #relative_output_filepath = context.scene.render.filepath.startswith('//')
             if self.apply_globals: bpy.ops.loom.globals_bake(action='APPLY')
+            if self.convert_paths: bpy.ops.loom.output_paths(action='ABSOLUTE')
+
             bpy.ops.wm.save_as_mainfile(filepath=fcopy, copy=True)
-            if self.apply_globals: bpy.ops.loom.globals_bake(action='RESET')
             
+            if self.apply_globals: bpy.ops.loom.globals_bake(action='RESET')
+            if not self.apply_globals and self.convert_paths: 
+                bpy.ops.loom.output_paths(action='RELATIVE')
+
             if not os.path.isfile(fcopy):
                 self.report({'WARNING'},"Can not save a copy of the current file")
                 return {"CANCELLED"}
@@ -2119,7 +2130,6 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
         if bpy.data.filepath:
             self.file_name = bpy.path.basename(bpy.data.filepath)[:-6]
         return context.window_manager.invoke_props_dialog(self, width=450)
-        #else: return self.execute(context)
 
     def draw(self, context):
         layout = self.layout
@@ -2128,9 +2138,11 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
         if self.suffix != 'DATE':
             row = layout.row(align=True)
             row.prop(self, "file_name")
+        
+        row = layout.row(align=True)
         if self.globals_flag:
-            row = layout.row(align=True)
-            row.prop(self, "apply_globals")
+            row.prop(self, "apply_globals", toggle=True)
+        row.prop(self, "convert_paths", toggle=True)
         '''
         col = layout.column(align=True)
         row = col.row(align=True)
@@ -5382,6 +5394,72 @@ class LOOM_OT_bake_globals(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class LOOM_OT_output_paths(bpy.types.Operator):
+    """Convert all output paths either into relative or absolute paths"""
+    bl_idname = "loom.output_paths"
+    bl_label = "Convert Output File Paths"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    action: bpy.props.EnumProperty(
+        name="Convert Paths to",
+        description="Absolute or relative Paths",
+        default = 'RELATIVE',
+        items=(
+            ('ABSOLUTE', "Absolute Paths", "", "CURVE_PATH", 1),
+            ('RELATIVE', "Relative Paths", "", "CON_FOLLOWPATH", 2)),
+        options={'SKIP_SAVE'})
+    
+    out_path: bpy.props.BoolProperty(
+        name="Convert output path",
+        description="Convert the regular output path",
+        default=True)
+        
+    comp_paths: bpy.props.BoolProperty(
+        name="Convert paths used in Comp",
+        description="Convert the paths of all file output nodes used in comp",
+        default=True)
+        
+    def out_nodes(self, scene):
+        tree = scene.node_tree
+        return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
+    
+    def execute(self, context):
+        scn = context.scene
+        
+        if self.action == 'ABSOLUTE':
+            
+            if self.out_path:
+                scn.render.filepath = os.path.realpath(bpy.path.abspath(scn.render.filepath))
+            
+            if self.comp_paths:
+                for node in self.out_nodes(scn):
+                    node.base_path = os.path.realpath(bpy.path.abspath(node.base_path))
+                
+        else:
+            if self.out_path:
+                scn.render.filepath = bpy.path.relpath(scn.render.filepath)
+            
+            if self.comp_paths:
+                for node in self.out_nodes(scn):
+                    node.base_path = bpy.path.relpath(node.base_path)
+        
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=450)
+        #else: return self.execute(context)
+        
+    def draw(self, context):
+        layout = self.layout
+        #layout.separator()
+        row = layout.row()
+        row = row.prop(self, "action") # , expand=True
+        row = layout.row(align=True)
+        row.prop(self, "out_path", toggle=True)
+        row.prop(self, "comp_paths", toggle=True)
+        row = layout.row()
+
+
 class LOOM_OT_utils_framerange(bpy.types.Operator):
     bl_idname = "loom.shot_range"
     bl_label = "Shot Range"
@@ -5745,12 +5823,16 @@ def draw_loom_outputpath(self, context):
     else:
         row.label(text="{}".format(file_path if not scn.loom.is_rendering else scn.render.filepath))
 
+    sub_row = row.row(align=True)
+    
+    original_paths = context.scene.loom.path_collection
     if globals_flag or context.scene.loom.path_collection:
-        sub_row = row.row(align=True)
-        if len(context.scene.loom.path_collection):
+        if len(original_paths) and not original_paths[0].orig == context.scene.render.filepath:
             sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="RECOVER_LAST", text="").action='RESET'
         sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="WORLD_DATA", text="").action='APPLY'
         #sub_row.operator_enum(LOOM_OT_bake_globals.bl_idname, "action", icon_only=True)
+
+    sub_row.operator(LOOM_OT_output_paths.bl_idname, icon="EXTERNAL_DRIVE", text="") #NETWORK_DRIVE
     layout.separator(factor=0.1)
 
 
@@ -5963,6 +6045,7 @@ classes = (
     LOOM_OT_select_project_directory,
     LOOM_OT_project_dialog,
     LOOM_OT_bake_globals,
+    LOOM_OT_output_paths,
     LOOM_OT_utils_framerange,
     LOOM_OT_render_preset,
     LOOM_MT_render_presets,
