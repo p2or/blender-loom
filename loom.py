@@ -1684,20 +1684,20 @@ class LOOM_UL_batch_list(bpy.types.UIList):
         row.prop(item, "frames", text="") #, icon='IMAGEFILE'
         #row = split_right.row(align=True) #row.prop(item, "input_filter", text="", icon='FILTER')
         row.prop(item, "input_filter", text="", icon='FILTER')
-
-        row.prop(item, "encode_flag", text="", icon='FILE_MOVIE')
         row.operator(
             LOOM_OT_batch_verify_input.bl_idname, 
             text="", 
             icon='GHOST_ENABLED').item_id = index
-        row.separator()
-        row.prop(item, "scene_override", text="", icon='SCENE_DATA')
+        
+        row.separator(factor=2)
+        row.prop(item, "scene_override", text="", icon='FILE_IMAGE')
         if item.scene_override:
             row.prop(item, "scene_selection", text="")
         row.prop(item, "camera_override", text="", icon='CAMERA_DATA')
         if item.camera_override:
             row.prop(item, "camera_selection", text="")
-        row.separator()
+        row.prop(item, "encode_flag", text="", icon='RENDER_ANIMATION')
+        row.separator(factor=1)
         row.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(item.path)
 
