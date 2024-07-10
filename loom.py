@@ -407,7 +407,7 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
         name="Batch Dialog Width",
         description="Width of Batch Render Dialog",
         subtype='PIXEL',
-        default=750, min=600, max=1800)
+        default=800, min=600, max=1800)
 
     batch_dialog_rows: bpy.props.IntProperty(
         name="Number of Rows",
