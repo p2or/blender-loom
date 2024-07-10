@@ -2196,7 +2196,7 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
         bpy.ops.loom.batch_render_dialog('INVOKE_DEFAULT')
 
     def cancel(self, context):
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
 
     def invoke(self, context, event):
         self.cursor_pos = [event.mouse_x, event.mouse_y]
@@ -2242,7 +2242,7 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
             self.report({'INFO'}, "Nothing selected")
  
         lum.batch_render_idx = len(lum.batch_render_coll)-1
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
         return {'FINISHED'}
     
 
@@ -2296,7 +2296,7 @@ class LOOM_OT_scan_blends(bpy.types.Operator, ImportHelper):
 
         blend_files = self.blend_files(self.directory, self.sub_folders)
         if next(blend_files, None) is None:
-            self.display_popup(context)
+            if bpy.app.version < (4, 1, 0): self.display_popup(context)
             self.report({'WARNING'},"No blend files found in {}".format(self.directory))
             return {'CANCELLED'}
         
@@ -2325,11 +2325,11 @@ class LOOM_OT_scan_blends(bpy.types.Operator, ImportHelper):
             self.report({'WARNING'}, "Skipped {}, invalid .blend file(s)".format(", ".join(invalid_files)))
 
         lum.batch_render_idx = len(lum.batch_render_coll)-1
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
         return {'FINISHED'}
 
     def cancel(self, context):
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
 
     def invoke(self, context, event):
         self.cursor_pos = [event.mouse_x, event.mouse_y]
@@ -3172,12 +3172,12 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
 
         if not os.path.isfile(self.filepath):
             self.report({'WARNING'},"Please select one image of an image sequence")
-            self.display_popup(context)
+            if bpy.app.version < (4, 1, 0): self.display_popup(context)
             return {"CANCELLED"}
 
         if not frame_suff:
             self.report({'WARNING'},"No valid image sequence")
-            self.display_popup(context)
+            if bpy.app.version < (4, 1, 0): self.display_popup(context)
             return {"CANCELLED"}
 
         sequence_name = filename.replace(frame_suff,'#'*len(frame_suff))
@@ -3234,11 +3234,11 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
             lum.sequence_rename = name_real
         lum.sequence_encode = sequence_path
 
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
         return {'FINISHED'}
     
     def cancel(self, context):
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
 
     def invoke(self, context, event):
         s = context.scene.loom.sequence_encode
@@ -3291,11 +3291,11 @@ class LOOM_OT_encode_select_movie(bpy.types.Operator, ImportHelper):
             lum.movie_path = os.path.join(folder, "{}{}.mov".format(filename,ext))
         else:
             lum.movie_path = self.filepath #self.report({'WARNING'},"No valid file type")
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
         return {'FINISHED'}
     
     def cancel(self, context):
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
 
     def invoke(self, context, event):
         self.filename = self.name_from_sequence(context)
@@ -5215,7 +5215,7 @@ class LOOM_OT_select_project_directory(bpy.types.Operator, ExportHelper):
         bpy.ops.loom.set_project_dialog('INVOKE_DEFAULT')
 
     def cancel(self, context):
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
 
     def invoke(self, context, event):
         self.cursor_pos = [event.mouse_x, event.mouse_y]
@@ -5226,7 +5226,7 @@ class LOOM_OT_select_project_directory(bpy.types.Operator, ExportHelper):
         scn = context.scene
         lum = scn.loom
         lum.project_directory = os.path.dirname(self.filepath)
-        self.display_popup(context)
+        if bpy.app.version < (4, 1, 0): self.display_popup(context)
         return {'FINISHED'}
 
 
@@ -5235,9 +5235,9 @@ class LOOM_OT_project_dialog(bpy.types.Operator):
     bl_idname = "loom.set_project_dialog"
     bl_label = "Setup Project Directory"
     bl_options = {'REGISTER'}
-
-    directory: bpy.props.StringProperty(name="Project Directory")
     
+    directory: bpy.props.StringProperty(name="Project Directory")
+
     @classmethod
     def poll(cls, context):
         return True
@@ -5251,7 +5251,11 @@ class LOOM_OT_project_dialog(bpy.types.Operator):
             bpy.ops.wm.save_as_mainfile('INVOKE_DEFAULT')
             return {'CANCELLED'}
 
-        if not self.directory or not os.path.isdir(self.directory):
+        project_dir = lum.project_directory
+        if not self.options.is_invoke:
+            project_dir = self.directory
+        
+        if not project_dir or not os.path.isdir(project_dir):
             self.report({'ERROR'}, "Please specify a valid Project Directory")
             bpy.ops.loom.set_project_dialog('INVOKE_DEFAULT')
             return {'CANCELLED'}
@@ -5260,7 +5264,7 @@ class LOOM_OT_project_dialog(bpy.types.Operator):
         prefs = context.preferences.addons[__name__].preferences
         for d in prefs.project_directory_coll:
             if d.creation_flag and d.name:
-                pdir = os.path.join(self.directory, d.name)
+                pdir = os.path.join(project_dir, d.name)
                 bpy.ops.loom.create_directory(directory=pdir)
                 if not os.path.isdir(bpy.path.abspath(pdir)):
                     errors.append(d.name)
@@ -5284,7 +5288,6 @@ class LOOM_OT_project_dialog(bpy.types.Operator):
         lum = context.scene.loom
         if not context.scene.loom.project_directory:
             lum.project_directory = bpy.path.abspath('//')
-        self.directory = lum.project_directory
         return context.window_manager.invoke_props_dialog(self, width=prefs.project_dialog_width)
 
     def check(self, context):
@@ -5311,7 +5314,7 @@ class LOOM_OT_project_dialog(bpy.types.Operator):
         col.operator(LOOM_OT_directories_ui.bl_idname, icon='REMOVE', text="").action = 'REMOVE'
         layout.separator()
         row = layout.row(align=True)
-        row.prop(self, "directory")
+        row.prop(lum, "project_directory")
         row.operator(LOOM_OT_select_project_directory.bl_idname, icon='FILE_FOLDER', text="")
         layout.separator()
 
