@@ -781,18 +781,6 @@ def render_preset_callback(scene, context):
     return items
 
 
-def render_scene_callback(self, context):
-    items = [('NONE', "Current Scene", "")]
-    if os.path.exists(self.path) and self.scene_override:
-        scene_list = None
-        with bpy.data.libraries.load(self.path) as (data_from, data_to):
-            scene_list = data_from.scenes
-        if scene_list:
-            for s in scene_list:
-                items.append((s, "{}".format(s), ""))
-    return items
-
-
 class LOOM_PG_render(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
     render_id: bpy.props.IntProperty()
@@ -804,18 +792,42 @@ class LOOM_PG_render(bpy.types.PropertyGroup):
     image_format: bpy.props.StringProperty()
 
 
+def render_scene_callback(self, context):
+    items = [('NONE', "Current Scene", "")]
+    if os.path.exists(self.path) and self.scene_override:
+        scene_list = None
+        with bpy.data.libraries.load(self.path) as (data_from, data_to):
+            scene_list = data_from.scenes
+        if len(scene_list) > 1:
+            for s in scene_list:
+                items.append((s, "{}".format(s), ""))
+    return items
+
+def render_camera_callback(self, context):
+    items = [('NONE', "Active Camera", "")]
+    if os.path.exists(self.path) and self.camera_override:
+        camera_list = None
+        with bpy.data.libraries.load(self.path) as (data_from, data_to):
+            camera_list = data_from.cameras
+        if len(camera_list) > 1:
+            for s in camera_list:
+                items.append((s, "{}".format(s), ""))
+    return items
+
 class LOOM_PG_batch_render(bpy.types.PropertyGroup):
     # name: bpy.props.StringProperty()
     rid: bpy.props.IntProperty()
     path: bpy.props.StringProperty()
     frame_start: bpy.props.IntProperty()
     frame_end: bpy.props.IntProperty()
+    input_filter: bpy.props.BoolProperty(default=False)
     scene: bpy.props.StringProperty()
     frames: bpy.props.StringProperty(name="Frames")
-    encode_flag: bpy.props.BoolProperty(default=False)
-    scene_override: bpy.props.BoolProperty(default=False)
-    scene_selection: bpy.props.EnumProperty(items=render_scene_callback)
-    input_filter: bpy.props.BoolProperty(default=False)
+    encode_flag: bpy.props.BoolProperty(name="Encode Sequence", default=False)
+    scene_override: bpy.props.BoolProperty(name="Override Scene", default=False)
+    scene_selection: bpy.props.EnumProperty(name="Scene", items=render_scene_callback)
+    camera_override: bpy.props.BoolProperty(name="Override Camera", default=False)
+    camera_selection: bpy.props.EnumProperty(name="Camera", items=render_camera_callback)
 
 
 class LOOM_PG_preset_flags(bpy.types.PropertyGroup):
@@ -1682,6 +1694,9 @@ class LOOM_UL_batch_list(bpy.types.UIList):
         row.prop(item, "scene_override", text="", icon='SCENE_DATA')
         if item.scene_override:
             row.prop(item, "scene_selection", text="")
+        row.prop(item, "camera_override", text="", icon='CAMERA_DATA')
+        if item.camera_override:
+            row.prop(item, "camera_selection", text="")
         row.separator()
         row.operator(LOOM_OT_open_folder.bl_idname, 
                 icon="DISK_DRIVE", text="").folder_path = os.path.dirname(item.path)
@@ -1853,7 +1868,14 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
 
         cli_arg_dict = {}
         for c, item in enumerate(lum.batch_render_coll):
-            python_expr = ("import bpy;" +\
+            
+            python_expr = "import bpy;"
+            if item.camera_override and item.camera_selection != 'NONE':
+                python_expr += "cam_name='{cam}';".format(cam=item.camera_selection)
+                python_expr += "cam=bpy.data.objects.get(cam_name);"
+                python_expr += "bpy.context.scene.camera = cam if cam is not None else bpy.context.scene.camera;"
+
+            python_expr += (
                     "bpy.ops.render.image_sequence(" +\
                     "frames='{fns}', isolate_numbers={iel}," +\
                     "render_silent={cli}").format(
@@ -1867,7 +1889,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
             python_expr += ");"
             python_expr += "bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)"
 
-            cli_args = [bl_bin, "-b", item.path] 
+            cli_args = [bl_bin, "-b", item.path]
             if item.scene_override and item.scene_selection != 'NONE':
                 cli_args.extend(["-S", '"{}"'.format(item.scene_selection)])
             cli_args.extend(["--python-expr", python_expr])
