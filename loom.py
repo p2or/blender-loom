@@ -784,7 +784,7 @@ class LOOM_PG_render(bpy.types.PropertyGroup):
 
 
 def render_preset_callback(self, context):
-    items = [('EMPTY', "Current Render Settings", "")]
+    items = [('EMPTY', "Active Render Settings", "")]
     preset_path = context.preferences.addons[__name__].preferences.render_presets_path
     if os.path.exists(preset_path):
         for f in os.listdir(preset_path):
@@ -795,7 +795,7 @@ def render_preset_callback(self, context):
     return items
 
 def render_scene_callback(self, context):
-    items = [('NONE', "Current Scene", "")]
+    items = [('NONE', "Active Scene", "")]
     if os.path.exists(self.path) and context.scene.loom.override_batch_render_settings:
         scene_list = None
         with bpy.data.libraries.load(self.path) as (data_from, data_to):
