@@ -5472,7 +5472,15 @@ class LOOM_OT_output_paths(bpy.types.Operator):
         name="Convert paths used in Comp",
         description="Convert the paths of all file output nodes used in comp",
         default=True)
-        
+    
+    def convert_path(self, filepath, relative=True):
+        basedir, filename = os.path.split(filepath)
+        if relative:
+            basedir = bpy.path.relpath(basedir)
+        else:
+            basedir = os.path.realpath(bpy.path.abspath(basedir))
+        return os.path.join(basedir, filename)
+
     def out_nodes(self, scene):
         tree = scene.node_tree
         return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
@@ -5481,22 +5489,18 @@ class LOOM_OT_output_paths(bpy.types.Operator):
         scn = context.scene
         
         if self.action == 'ABSOLUTE':
-            
             if self.out_path:
-                scn.render.filepath = os.path.realpath(bpy.path.abspath(scn.render.filepath))
-            
+                scn.render.filepath = self.convert_path(scn.render.filepath, relative=False)
             if self.comp_paths:
                 for node in self.out_nodes(scn):
-                    node.base_path = os.path.realpath(bpy.path.abspath(node.base_path))
-                
+                    node.base_path = self.convert_path(node.base_path, relative=False)
         else:
             if self.out_path:
-                scn.render.filepath = bpy.path.relpath(scn.render.filepath)
-            
+                scn.render.filepath = self.convert_path(scn.render.filepath)
             if self.comp_paths:
                 for node in self.out_nodes(scn):
-                    node.base_path = bpy.path.relpath(node.base_path)
-        
+                    node.base_path = self.convert_path(node.base_path)
+
         return {'FINISHED'}
     
     def invoke(self, context, event):
