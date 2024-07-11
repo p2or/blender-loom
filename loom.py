@@ -418,6 +418,10 @@ class LOOM_AP_preferences(bpy.types.AddonPreferences):
     batch_paths_flag: bpy.props.BoolProperty(
         name="Display File Paths",
         description="Display File paths")
+    
+    batch_icon_only_flag: bpy.props.BoolProperty(
+        name="Compact View",
+        description="Hides the names of the override properties")
 
     batch_path_col_width: bpy.props.FloatProperty(
         name="Path Column Width",
@@ -784,36 +788,38 @@ class LOOM_PG_render(bpy.types.PropertyGroup):
 
 
 def render_preset_callback(self, context):
-    items = [('EMPTY', "Active Render Settings", "")]
+    # SCENE RECORD_OFF, RESTRICT_RENDER_ON
+    items = [('EMPTY', "Active Render Settings", "Active Render Settings", 'SCENE', 0)] 
     preset_path = context.preferences.addons[__name__].preferences.render_presets_path
     if os.path.exists(preset_path):
-        for f in os.listdir(preset_path):
+        for i, f in enumerate(os.listdir(preset_path)):
             if not f.startswith(".") and f.endswith(".py"):
                 fn, ext = os.path.splitext(f)
-                #d = bpy.path.display_name(os.path.join(rndr_presets_path, f))
-                items.append((f, "'{}' Render Preset".format(fn), ""))
+                #d = bpy.path.display_name(os.path.join(rndr_presets_path, f)) # RECORD_ON
+                items.append((f, "'{}' Render Preset".format(fn), f, 'RESTRICT_RENDER_OFF', i+1)) 
     return items
 
 def render_scene_callback(self, context):
-    items = [('NONE', "Active Scene", "")]
+    items = [('NONE', "Active Scene", "Active Scene", 'SEQ_PREVIEW', 0)]
     if os.path.exists(self.path) and context.scene.loom.override_batch_render_settings:
         scene_list = None
         with bpy.data.libraries.load(self.path) as (data_from, data_to):
             scene_list = data_from.scenes
         if len(scene_list) > 1:
-            for s in scene_list:
-                items.append((s, "{}".format(s), ""))
+            for i, s in enumerate(scene_list):
+                items.append((s, "{}".format(s), s, 'OUTLINER_OB_IMAGE', i+1)) #FILE_IMAGE
     return items
 
 def render_camera_callback(self, context):
-    items = [('NONE', "Active Camera", "")]
+    items = [('NONE', "Active Camera", "Active Camera", 'CAMERA_DATA', 0)]
     if os.path.exists(self.path) and context.scene.loom.override_batch_render_settings:
         camera_list = None
         with bpy.data.libraries.load(self.path) as (data_from, data_to):
             camera_list = data_from.cameras
         if len(camera_list) > 1:
-            for s in camera_list:
-                items.append((s, "{}".format(s), ""))
+            for i, s in enumerate(camera_list):#for s in camera_list:
+                items.append((s, "{}".format(s), s, 'OUTLINER_OB_CAMERA', i+1))
+
     return items
 
 class LOOM_PG_batch_render(bpy.types.PropertyGroup):
@@ -1655,12 +1661,14 @@ class LOOM_MT_display_settings(bpy.types.Menu):
         layout = self.layout
         layout.label(text="Display Settings", icon="COLOR")
         layout.separator()
+        if context.scene.loom.override_batch_render_settings:
+            layout.prop(prefs, "batch_icon_only_flag")
         layout.prop(prefs, "batch_paths_flag")
-        layout.prop(prefs, "batch_dialog_rows")
         if prefs.batch_paths_flag:
             layout.prop(prefs, "batch_path_col_width")
         else:
             layout.prop(prefs, "batch_name_col_width")
+        layout.prop(prefs, "batch_dialog_rows")
         layout.operator(LOOM_OT_batch_dialog_reset.bl_idname, icon="ANIM")
 
 
@@ -1700,10 +1708,14 @@ class LOOM_UL_batch_list(bpy.types.UIList):
         if lum.override_batch_render_settings:
 
             row.separator(factor=1)
-            row.prop(item, "scene_selection", text="")
-            row.prop(item, "camera_selection", text="")
+            #row.label(text="", icon='FILE_IMAGE')
+            row.prop(item, "scene_selection", text="", icon_only=prefs.batch_icon_only_flag)
+            #row.label(text="", icon='CAMERA_DATA')
+            row.prop(item, "camera_selection", text="", icon_only=prefs.batch_icon_only_flag)
             if len(render_preset_callback(self, context)) > 1:
-                row.prop(item, "preset_selection", text="")
+                #row.label(text="", icon='SCENE')
+                row.prop(item, "preset_selection", text="", icon_only=prefs.batch_icon_only_flag)
+                #row.label(text=item.preset_selection) #, emboss=True
             #row.separator(factor=2)
 
         row.prop(item, "encode_flag", text="", icon='RENDER_ANIMATION')
@@ -1942,8 +1954,8 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         
         col = row.column(align=True)
         #settings_icon = 'MODIFIER_OFF' if lum.override_batch_render_settings else 'MODIFIER_ON'
-        col.prop(lum, "override_batch_render_settings", text="", icon='MODIFIER_ON')
-        col.menu(LOOM_MT_display_settings.bl_idname, icon='DOWNARROW_HLT', text="")
+        col.prop(lum, "override_batch_render_settings", text="", icon='MODIFIER_ON') # TOOL_SETTINGS
+        col.menu(LOOM_MT_display_settings.bl_idname, icon="COLOR", text="") #, icon='DOWNARROW_HLT',
 
         col.separator(factor=3)
         col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon='ADD', text="")
@@ -2429,6 +2441,7 @@ class LOOM_OT_batch_dialog_reset(bpy.types.Operator):
         prefs = context.preferences.addons[__name__].preferences
         prefs.property_unset("batch_dialog_rows")
         prefs.property_unset("batch_paths_flag")
+        prefs.property_unset("batch_icon_only_flag")
         prefs.property_unset("batch_path_col_width")
         prefs.property_unset("batch_name_col_width")       
         return {'FINISHED'}
