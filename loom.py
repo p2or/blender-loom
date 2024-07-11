@@ -1659,7 +1659,7 @@ class LOOM_MT_display_settings(bpy.types.Menu):
     def draw(self, context):
         prefs = context.preferences.addons[__name__].preferences
         layout = self.layout
-        layout.label(text="Display Settings", icon="COLOR")
+        layout.label(text="Display Settings", icon="DESKTOP") #COLOR
         layout.separator()
         if context.scene.loom.override_batch_render_settings:
             layout.prop(prefs, "batch_icon_only_flag")
@@ -1955,7 +1955,7 @@ class LOOM_OT_batch_dialog(bpy.types.Operator):
         col = row.column(align=True)
         #settings_icon = 'MODIFIER_OFF' if lum.override_batch_render_settings else 'MODIFIER_ON'
         col.prop(lum, "override_batch_render_settings", text="", icon='MODIFIER_ON') # TOOL_SETTINGS
-        col.menu(LOOM_MT_display_settings.bl_idname, icon="COLOR", text="") #, icon='DOWNARROW_HLT',
+        col.menu(LOOM_MT_display_settings.bl_idname, icon="DOWNARROW_HLT", text="") # COLOR,
 
         col.separator(factor=3)
         col.operator(LOOM_OT_batch_selected_blends.bl_idname, icon='ADD', text="")
