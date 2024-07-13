@@ -1675,6 +1675,7 @@ class LOOM_MT_display_settings(bpy.types.Menu):
 class LOOM_UL_batch_list(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         prefs = context.preferences.addons[__name__].preferences
+        file_exists = os.path.isfile(item.path)
         lum = context.scene.loom
 
         if prefs.batch_paths_flag:
@@ -1690,7 +1691,7 @@ class LOOM_UL_batch_list(bpy.types.UIList):
                 text="{:02d}".format(index+1), 
                 emboss=False).item_id = index
             split_left.label(text=item.name, icon='FILE_BLEND')
-            
+        
         split_right = split.split(factor=.99)
         row = split_right.row(align=True)        
         row.operator(
@@ -1704,8 +1705,8 @@ class LOOM_UL_batch_list(bpy.types.UIList):
             LOOM_OT_batch_verify_input.bl_idname, 
             text="", 
             icon='GHOST_ENABLED').item_id = index
-        
-        if lum.override_batch_render_settings:
+
+        if lum.override_batch_render_settings and file_exists:
 
             row.separator(factor=1)
             #row.label(text="", icon='FILE_IMAGE')
@@ -1720,8 +1721,12 @@ class LOOM_UL_batch_list(bpy.types.UIList):
 
         row.prop(item, "encode_flag", text="", icon='RENDER_ANIMATION')
         row.separator(factor=1)
+        folder_icon = "DISK_DRIVE" if file_exists else 'ERROR'
         row.operator(LOOM_OT_open_folder.bl_idname, 
-                icon="DISK_DRIVE", text="").folder_path = os.path.dirname(item.path)
+            icon=folder_icon, text="").folder_path = os.path.dirname(item.path)
+
+        if not file_exists:
+            layout.enabled = False
 
     def invoke(self, context, event):
         pass
