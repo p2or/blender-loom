@@ -2184,7 +2184,9 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
         row = layout.row(align=True)
         if self.globals_flag:
             row.prop(self, "apply_globals", toggle=True)
-        row.prop(self, "convert_paths", toggle=True)
+        
+        row = layout.row(align=True)
+        row.prop(self, "convert_paths")
         '''
         col = layout.column(align=True)
         row = col.row(align=True)
@@ -2193,7 +2195,7 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
             row = col.row(align=True)
             row.prop(self, "apply_globals", toggle=True)
         '''
-        layout.row()
+        layout.separator(factor=.2)
 
 
 class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
