@@ -4880,6 +4880,10 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
             lines = self.arguments.splitlines()
             for c, line in enumerate(lines):
                 args_user.append(args_filter.findall(" ".join(lines)))
+            
+            ''' If no bash file name is provided and bash is the only option '''
+            if prefs.terminal == 'osx-default' and not self.bash_name:
+                self.bash_name = "loom"
         
         elif len(self.argument_collection) > 0:
             #idcs = set([item.idc for item in self.argument_collection]) 
