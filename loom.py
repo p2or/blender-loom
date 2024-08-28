@@ -1227,8 +1227,8 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             user_error = True
         
         """ Scene validation """
-        if scn.render.use_sequencer and len(scn.sequence_editor.sequences):
-            if self.validate_sequencer(context):
+        if scn.render.use_sequencer and hasattr(scn, "sequencer"):
+            if len(scn.sequence_editor.sequences) and self.validate_sequencer(context):
                 if not user_input.isdigit():
                     self.report(
                         {'INFO'}, 
