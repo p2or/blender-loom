@@ -982,6 +982,13 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         description="Render the contents of the viewport",
         default=False,
         options={'SKIP_SAVE'})
+    
+    remove_frame_flag: bpy.props.BoolProperty(
+        name="Remove Frame Numbers",
+        description="Remove frame number from file name (post render)",
+        default=False,
+        options={'SKIP_SAVE'}
+        )
 
 # -------------------------------------------------------------------
 #    UI Operators
@@ -3941,6 +3948,50 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         render.padded_zeros = self.digits if not self._dec else self.digits + self._dec
         render.image_format = self._extension
 
+    def post_rename(self, render_folder, render_extension, open_folder=False):
+        """ See: LOOM_OT_utils_post_rename """
+        def number_suffix(filename):
+            regex = re.compile(r'\d+\b')
+            digits = ([x for x in regex.findall(filename)])
+            return next(reversed(digits), None)
+                       
+        image_seqences = {}
+        for f in os.scandir(render_folder):
+            if not f.is_file():
+                continue
+            if not f.name.endswith(render_extension):
+                continue
+            filename_noext, extension = os.path.splitext(f.name)
+            frame_number = number_suffix(filename_noext)
+            if not frame_number or filename_noext == frame_number:
+                continue
+            image_seqences.setdefault(
+                filename_noext.replace(frame_number, ""), 
+                []).append(f.name)
+        
+        renamed_images = []
+        existing_images = []
+        for k, v in image_seqences.items():
+            if len(v) == 1:
+                filename_noext, extension = os.path.splitext(v[0])
+                old_filepath = os.path.join(render_folder, v[0])
+                new_filepath = os.path.join(render_folder, k + extension)
+                if not os.path.isfile(new_filepath):
+                    os.rename(old_filepath, new_filepath)
+                    renamed_images.append(v[0])
+                else:
+                    existing_images.append(v[0])
+
+        if len(existing_images) > 0:
+            self.report({'INFO'}, 
+                "'{}' could not be renamed (they already exist)".format(
+                ", ".join(existing_images)))
+        if len(renamed_images) > 0:
+            self.report({'INFO'}, "Renamed '{}'".format(", ".join(renamed_images)))
+
+        if open_folder:
+            bpy.ops.loom.open_folder(folder_path=render_folder)
+   
     def final_report(self):
         if self._rendered_frames:
             frame_count = len(self._rendered_frames)
@@ -4062,6 +4113,15 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             """ Reset output path & display results """
             self.final_report()
             self.reset_output_paths(scn)
+
+            """ Remove frame numbers from non-sequencial images """
+            if scn.loom.remove_frame_flag:
+                #bpy.ops.loom.post_rename
+                self.post_rename(
+                    render_folder = self._folder, 
+                    render_extension = self._extension,
+                    open_folder = False)
+
             return {"FINISHED"}
 
         """ Add timer & handlers for modal """
@@ -4100,6 +4160,14 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 """ Display results """
                 self.final_report()
 
+                """ Remove frame numbers from non-sequencial images """
+                if scn.loom.remove_frame_flag:
+                    #bpy.ops.loom.post_rename(
+                    self.post_rename(
+                        render_folder = self._folder, 
+                        render_extension = self._extension,
+                        open_folder = False)
+                
                 return {"FINISHED"}
 
             elif self._rendering is False:
@@ -5018,6 +5086,114 @@ class LOOM_OT_utils_create_directory(bpy.types.Operator):
         return context.window_manager.invoke_confirm(self, event)
 
 
+def image_extension_callback(scene, context):
+    items = [] # ('EMPTY', "Current Render Settings", "")
+    for f in bpy.path.extensions_image:
+        items.append((f[1:], f[1:], ""))
+    return items
+
+class LOOM_OT_utils_post_rename(bpy.types.Operator):
+    """Remove frame numbers from non-sequencial images within a given folder"""
+    bl_idname = "loom.post_rename"
+    bl_label = "Post-Render Rename"
+    bl_options = {'REGISTER'}
+
+    render_folder: bpy.props.StringProperty(
+        name="Folder Path",
+        description="Path to folder",
+        maxlen=1024,
+        subtype='DIR_PATH')
+    '''
+    render_extension: bpy.props.StringProperty(
+        name="Image Extension",
+        description="Extension to search for")
+    '''
+    render_extension: bpy.props.EnumProperty(
+        name="Image Extension",
+        items=image_extension_callback)
+
+    open_folder: bpy.props.BoolProperty(
+        name="Open File Browser",
+        description="Open File Browser",
+        default=True)
+    
+    def number_suffix(self, filename):
+        regex = re.compile(r'\d+\b')
+        digits = ([x for x in regex.findall(filename)])
+        return next(reversed(digits), None)
+    
+    def execute(self, context):
+        if not self.render_folder:
+            self.report({'ERROR'}, "Please specify any valid folder")
+            return {"CANCELLED"}
+        if not os.path.isdir(self.render_folder):
+            self.report({'ERROR'}, "{} does not exist".format(self.render_folder))
+            return {"CANCELLED"}
+        if not self.render_extension:
+            self.report({'ERROR'}, "Please specify any image extension")
+
+        image_seqences = {}
+        for f in os.scandir(self.render_folder):
+            if not f.is_file():
+                continue
+            if not f.name.endswith(self.render_extension):
+                continue
+            filename_noext, extension = os.path.splitext(f.name)
+            frame_number = self.number_suffix(filename_noext)
+            if not frame_number or filename_noext == frame_number:
+                continue
+            image_seqences.setdefault(
+                filename_noext.replace(frame_number, ""), 
+                []).append(f.name)
+        
+        renamed_images = []
+        existing_images = []
+        for k, v in image_seqences.items():
+            if len(v) == 1:
+                filename_noext, extension = os.path.splitext(v[0])
+                old_filepath = os.path.join(self.render_folder, v[0])
+                new_filepath = os.path.join(self.render_folder, k + extension)
+                if not os.path.isfile(new_filepath):
+                    os.rename(old_filepath, new_filepath)
+                    renamed_images.append(v[0])
+                else:
+                    existing_images.append(v[0])
+
+        if len(existing_images) > 0:
+            self.report({'INFO'}, 
+                "'{}' could not be renamed (they already exist)".format(
+                ", ".join(existing_images)))
+        if len(renamed_images) > 0:
+            self.report({'INFO'}, "Renamed '{}'".format(", ".join(renamed_images)))
+        else:
+            self.report({'INFO'}, "Nothing to do")
+        
+        if self.open_folder and len(renamed_images) > 0:
+            bpy.ops.loom.open_folder(folder_path=self.render_folder)
+
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        scn = context.scene
+        prefs = context.preferences.addons[__name__].preferences
+        fp = bpy.path.abspath(scn.render.filepath)
+        output_folder, file_name = os.path.split(replace_globals(fp))
+
+        self.render_folder = os.path.realpath(output_folder)
+        self.render_extension = scn.render.file_extension[1:]
+
+        return context.window_manager.invoke_props_dialog(self, 
+            width=(prefs.render_dialog_width))
+
+    def draw(self, context):
+        lum = context.scene.loom
+        layout = self.layout
+        layout.row().prop(self, "render_folder") 
+        layout.row().prop(self, "render_extension")
+        layout.row().prop(self, "open_folder")
+        layout.separator(factor=0.05)
+
+
 class LOOM_OT_utils_marker_unbind(bpy.types.Operator):
     """Unbind Markers in Selection"""
     bl_idname = "loom.unbind_markers"
@@ -5802,7 +5978,8 @@ def draw_loom_outputpath(self, context):
 
     if not file_name.count('#'): # and not scn.loom.is_rendering:
         if not bool(re.search(r'\d+\.[a-zA-Z0-9]{3,4}\b', file_name)):
-            file_name = "{}{}".format(file_name, "#"*4)
+            if not scn.loom.remove_frame_flag:
+                file_name = "{}{}".format(file_name, "#"*4)
     else:
         file_name = re.sub(r"(?!#+$|#+\.[a-zA-Z0-9]{3,4}\b)#+", '', file_name)
     
@@ -5813,7 +5990,7 @@ def draw_loom_outputpath(self, context):
     if any(ext in output_folder for ext in glob_vars.keys()):
         output_folder = replace_globals(output_folder)
         globals_flag = True
-
+        
     if file_name.endswith(tuple(scn.render.file_extension)):
         file_path = os.path.join(output_folder, file_name)
     else:
@@ -5835,6 +6012,7 @@ def draw_loom_outputpath(self, context):
         row.label(text="{}".format(file_path if not scn.loom.is_rendering else scn.render.filepath))
 
     sub_row = row.row(align=True)
+    sub_row.prop(scn.loom, "remove_frame_flag", icon="SORTALPHA", text="")
     
     original_paths = context.scene.loom.path_collection
     if globals_flag or context.scene.loom.path_collection:
@@ -6050,6 +6228,7 @@ classes = (
     LOOM_OT_delete_bash_files,
     LOOM_OT_delete_file,
     LOOM_OT_utils_create_directory,
+    LOOM_OT_utils_post_rename,
     LOOM_OT_utils_marker_unbind,
     LOOM_OT_utils_marker_rename,
     LOOM_OT_utils_marker_generate,
@@ -6089,6 +6268,9 @@ def register():
         kmi = km.keymap_items.new(LOOM_OT_rename_dialog.bl_idname, 'F2', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
+        kmi = km.keymap_items.new(LOOM_OT_utils_post_rename.bl_idname, 'F2', 'PRESS', ctrl=True, shift=True, alt=True)
+        kmi.active = True
+        addon_keymaps.append((km, kmi))
         kmi = km.keymap_items.new(LOOM_OT_open_output_folder.bl_idname, 'F3', 'PRESS', ctrl=True, shift=True)
         kmi.active = True
         addon_keymaps.append((km, kmi))
@@ -6114,6 +6296,9 @@ def register():
             kmi.active = True
             addon_keymaps.append((km, kmi))
             kmi = km.keymap_items.new(LOOM_OT_rename_dialog.bl_idname, 'F2', 'PRESS', oskey=True, shift=True)
+            kmi.active = True
+            addon_keymaps.append((km, kmi))
+            kmi = km.keymap_items.new(LOOM_OT_utils_post_rename.bl_idname, 'F2', 'PRESS', oskey=True, shift=True, alt=True)
             kmi.active = True
             addon_keymaps.append((km, kmi))
             kmi = km.keymap_items.new(LOOM_OT_open_output_folder.bl_idname, 'F3', 'PRESS', oskey=True, shift=True)
