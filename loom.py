@@ -5087,7 +5087,7 @@ class LOOM_OT_utils_create_directory(bpy.types.Operator):
 
 
 def image_extension_callback(scene, context):
-    items = [] # ('EMPTY', "Current Render Settings", "")
+    items = []
     for f in bpy.path.extensions_image:
         items.append((f[1:], f[1:], ""))
     return items
@@ -5095,7 +5095,7 @@ def image_extension_callback(scene, context):
 class LOOM_OT_utils_post_rename(bpy.types.Operator):
     """Remove frame numbers from non-sequencial images within a given folder"""
     bl_idname = "loom.post_rename"
-    bl_label = "Post-Render Rename"
+    bl_label = "Remove Frame Numbers (Post-Render)"
     bl_options = {'REGISTER'}
 
     render_folder: bpy.props.StringProperty(
@@ -5103,11 +5103,7 @@ class LOOM_OT_utils_post_rename(bpy.types.Operator):
         description="Path to folder",
         maxlen=1024,
         subtype='DIR_PATH')
-    '''
-    render_extension: bpy.props.StringProperty(
-        name="Image Extension",
-        description="Extension to search for")
-    '''
+
     render_extension: bpy.props.EnumProperty(
         name="Image Extension",
         items=image_extension_callback)
@@ -5163,10 +5159,11 @@ class LOOM_OT_utils_post_rename(bpy.types.Operator):
             self.report({'INFO'}, 
                 "'{}' could not be renamed (they already exist)".format(
                 ", ".join(existing_images)))
+        
         if len(renamed_images) > 0:
             self.report({'INFO'}, "Renamed '{}'".format(", ".join(renamed_images)))
         else:
-            self.report({'INFO'}, "Nothing to do")
+            self.report({'INFO'}, "No potential image(s) found to rename")
         
         if self.open_folder and len(renamed_images) > 0:
             bpy.ops.loom.open_folder(folder_path=self.render_folder)
@@ -6296,9 +6293,6 @@ def register():
             kmi.active = True
             addon_keymaps.append((km, kmi))
             kmi = km.keymap_items.new(LOOM_OT_rename_dialog.bl_idname, 'F2', 'PRESS', oskey=True, shift=True)
-            kmi.active = True
-            addon_keymaps.append((km, kmi))
-            kmi = km.keymap_items.new(LOOM_OT_utils_post_rename.bl_idname, 'F2', 'PRESS', oskey=True, shift=True, alt=True)
             kmi.active = True
             addon_keymaps.append((km, kmi))
             kmi = km.keymap_items.new(LOOM_OT_open_output_folder.bl_idname, 'F3', 'PRESS', oskey=True, shift=True)
