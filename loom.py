@@ -4313,7 +4313,8 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
         """ Handle overlay states """
         self._overlays_state = area.spaces[0].overlay.show_overlays
         #self._gizmos_state = area.spaces[0].overlay.show_overlays
-        self.overlays(area, self.keep_overlays)
+        if scn.render.engine != 'CYCLES':
+            self.overlays(area, self.keep_overlays)
 
         """ Main output path """        
         self._output_path = scn.render.filepath
