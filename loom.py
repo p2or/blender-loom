@@ -4295,7 +4295,11 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
         glob_vars = prefs.global_variable_coll
 
         """ Filter user input """
-        self._frames = filter_frames(self.frames, scn.frame_step, self.isolate_numbers)
+        if self.options.is_invoke:
+            self._frames = filter_frames(scn.loom.frame_input, scn.frame_step, self.isolate_numbers)
+        else:
+            self._frames = filter_frames(self.frames, scn.frame_step, self.isolate_numbers)
+
         if not self._frames:
             self.report({'ERROR'}, "No frames to render")
             return {"CANCELLED"}
@@ -4375,8 +4379,7 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
         return {"FINISHED"}
 
     def draw(self, context):
-        scn = context.scene
-        lum = scn.loom
+        lum = context.scene.loom
         layout = self.layout
         split_factor = .17
 
@@ -4407,14 +4410,12 @@ class LOOM_OT_render_flipbook(bpy.types.Operator):
         hlp.url = bl_info["doc_url"]
 
     def invoke(self, context, event):
-        scn = context.scene
-        lum = scn.loom
+        lum = context.scene.loom
         prefs = context.preferences.addons[__name__].preferences
         
         # Set invoke properties
-        self.frames = lum.frame_input
+        #self.frames = lum.frame_input
         self.open_render_folder = True
-
         if not lum.is_property_set("frame_input") or not lum.frame_input:
             bpy.ops.loom.guess_frames(detect_missing_frames=False)
         
