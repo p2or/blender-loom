@@ -5633,9 +5633,11 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
             if image_settings.file_format in ('OPEN_EXR', 'OPEN_EXR_MULTILAYER'):
                 preset_values += [
                                 'render.image_settings.exr_codec', 
-                                'render.image_settings.use_zbuffer',
                                 'render.image_settings.use_preview'
                                 ]
+                if bpy.app.version < (4, 0, 0):
+                    preset_values.append('render.image_settings.use_zbuffer')
+                    
             if image_settings.file_format in ('TIFF'):
                 preset_values += ['render.image_settings.tiff_codec']
             if image_settings.file_format in ('JPEG'):
@@ -5662,7 +5664,7 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
                 for prop in dir(scene.display):
                     if not prop.startswith(ignore_attribs + ("shading",)):
                         preset_values.append("scene.display.{}".format(prop))
-
+        
         return preset_values
 
 
