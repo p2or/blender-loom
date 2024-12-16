@@ -1452,7 +1452,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         """ Returns all selected grease pencil frames """
         ctrl_points = set()
         for o in context.selected_objects:
-            if o.type == 'GPENCIL':
+            if o.type in ('GPENCIL', 'GREASEPENCIL'):
                 for l in o.data.layers:
                     for f in l.frames:
                         if f.select:
