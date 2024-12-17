@@ -5887,7 +5887,7 @@ def draw_loom_outputpath(self, context):
     if globals_flag or context.scene.loom.path_collection:
         if len(original_paths) and not original_paths[0].orig == context.scene.render.filepath:
             sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="RECOVER_LAST", text="").action='RESET'
-        sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="MESH_UVSPHERE", text="").action='APPLY' #WORLD_DATA
+        sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="WORLD_DATA", text="").action='APPLY' #WORLD_DATA
         #sub_row.operator_enum(LOOM_OT_bake_globals.bl_idname, "action", icon_only=True)
 
     sub_row.operator(LOOM_OT_output_paths.bl_idname, icon="EXTERNAL_DRIVE", text="") #NETWORK_DRIVE
