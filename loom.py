@@ -5968,7 +5968,7 @@ def draw_loom_metadata(self, context):
                 layout.row().label(text="" + i, icon="DOT" ) #¶ FONTPREVIEW
             layout.separator(factor=0.3)
         """
-        layout.separator(factor=0.3)
+        #layout.separator(factor=0.3)
 
 
 def draw_loom_project(self, context):
@@ -6247,7 +6247,7 @@ def register():
     bpy.types.RENDER_PT_output.prepend(draw_loom_outputpath)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_compositor_paths)
-    bpy.types.RENDER_PT_stamp_note.append(draw_loom_metadata)
+    bpy.types.RENDER_PT_stamp_note.prepend(draw_loom_metadata)
     bpy.types.DOPESHEET_HT_header.append(draw_loom_dopesheet)
     bpy.types.PROPERTIES_HT_header.append(draw_loom_render_presets)
     bpy.types.LOOM_PT_render_presets.append(draw_loom_preset_flags) 
