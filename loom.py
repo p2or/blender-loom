@@ -1457,7 +1457,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         """ Returns all selected grease pencil frames """
         ctrl_points = set()
         for o in context.selected_objects:
-            if o.type == 'GPENCIL':
+            if o.type in ('GPENCIL', 'GREASEPENCIL'):
                 for l in o.data.layers:
                     for f in l.frames:
                         if f.select:
@@ -5628,6 +5628,12 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
                 if prop.startswith("use_"):
                     preset_values.append("context.view_layer.{}".format(prop))
 
+            if bpy.context.scene.render.engine in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT') and \
+                hasattr(context.view_layer, "eevee"):
+                for prop in dir(context.view_layer.eevee):
+                    if prop.startswith("use_"):
+                        preset_values.append("context.view_layer.eevee.{}".format(prop))
+
         if preset_flags.include_file_format:
             preset_values += [
                             'render.image_settings.file_format',
@@ -5638,9 +5644,11 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
             if image_settings.file_format in ('OPEN_EXR', 'OPEN_EXR_MULTILAYER'):
                 preset_values += [
                                 'render.image_settings.exr_codec', 
-                                'render.image_settings.use_zbuffer',
                                 'render.image_settings.use_preview'
                                 ]
+                if bpy.app.version < (4, 0, 0):
+                    preset_values.append('render.image_settings.use_zbuffer')
+                    
             if image_settings.file_format in ('TIFF'):
                 preset_values += ['render.image_settings.tiff_codec']
             if image_settings.file_format in ('JPEG'):
@@ -5652,17 +5660,22 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
                 for prop in dir(scene.cycles):
                     if not prop.startswith(ignore_attribs):
                         preset_values.append("scene.cycles.{}".format(prop))
-                        
-            if bpy.context.scene.render.engine in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'):
+            
+            elif bpy.context.scene.render.engine in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'):
                 for prop in dir(scene.eevee):
                     if "options" in prop:
                         continue
                     if not prop.startswith(ignore_attribs + ("gi_cache_info",)):
                         preset_values.append("scene.eevee.{}".format(prop))
             
-            if scene.render.engine == 'BLENDER_WORKBENCH':
+            elif scene.render.engine == 'HYDRA_STORM':
+                for prop in dir(scene.hydra_storm):
+                    if not prop.startswith(ignore_attribs + ("type",)):
+                        preset_values.append("scene.hydra_storm.{}".format(prop))
+
+            elif scene.render.engine == 'BLENDER_WORKBENCH':
                 for prop in dir(scene.display.shading):
-                    if not prop.startswith(ignore_attribs + ("selected_studio_light","cycles",)):
+                    if not prop.startswith(ignore_attribs + ("selected_studio_light", "cycles", "wireframe_color_type")):
                         preset_values.append("scene.display.shading.{}".format(prop))
                 for prop in dir(scene.display):
                     if not prop.startswith(ignore_attribs + ("shading",)):
