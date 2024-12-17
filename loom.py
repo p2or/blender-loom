@@ -25,6 +25,7 @@ import blend_render_info
 import rna_keymap_ui
 import webbrowser
 
+from bpy.app.handlers import persistent
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 from bl_operators.presets import AddPresetBase
 from bl_ui.utils import PresetPanel
@@ -976,6 +977,10 @@ class LOOM_PG_scene_settings(bpy.types.PropertyGroup):
         description="Select a custom render preset",
         items=render_preset_callback,
         options={'SKIP_SAVE'})
+    
+    meta_note: bpy.props.StringProperty(
+        name="Note",
+        description="Stores the value of the stamp note")
 
     flipbook_flag: bpy.props.BoolProperty(
         name="Render Flipbook",
@@ -5726,6 +5731,33 @@ def draw_loom_preset_header(self, context):
 
 
 # -------------------------------------------------------------------
+#    Handler
+# -------------------------------------------------------------------
+
+@persistent
+def loom_meta_note(scene):
+    if scene.render.use_stamp_note and not scene.render.is_movie_format:
+        prefs = bpy.context.preferences.addons[__name__].preferences
+        glob_vars = prefs.global_variable_coll
+
+        scene.loom.meta_note = scene.render.stamp_note_text
+        if any(ext in scene.render.stamp_note_text for ext in glob_vars.keys()):
+            scene.render.stamp_note_text = replace_globals(scene.render.stamp_note_text)
+        
+        lines = scene.render.stamp_note_text.split("\\n")
+        scene.render.stamp_note_text = lines[0]
+        if len(lines) > 1:
+            scene.render.stamp_note_text += os.linesep
+            for i in lines[1:]:
+                scene.render.stamp_note_text += i + os.linesep
+
+@persistent
+def loom_meta_note_reset(scene):
+    if scene.render.use_stamp_note and not scene.render.is_movie_format:
+        scene.render.stamp_note_text = scene.loom.meta_note
+
+
+# -------------------------------------------------------------------
 #    Panels and Menus
 # -------------------------------------------------------------------
 
@@ -5900,6 +5932,44 @@ def draw_loom_compositor_paths(self, context):
             #box.row().operator(LOOM_OT_utils_node_cleanup.bl_idname)
             layout.separator()
             
+
+def draw_loom_metadata(self, context):
+    """Append compiled stamp string using globals to the Metadata area"""
+    prefs = context.preferences.addons[__name__].preferences
+    glob_vars = prefs.global_variable_coll
+    scn = context.scene
+
+    if not scn.render.use_stamp_note: #or scn.render.is_movie_format:
+        return
+    
+    globals_flag = False
+    note_text = scn.render.stamp_note_text
+    if any(ext in note_text for ext in glob_vars.keys()):
+        note_text = replace_globals(note_text)
+        globals_flag = True
+
+    if globals_flag or "\\n" in note_text:
+        layout = self.layout
+        box = layout.box()
+        row = box.row()
+        txt = " " + note_text.replace("\\n", " ¶ ")
+        icn = 'MESH_UVSPHERE'
+        if scn.render.is_movie_format:
+            txt = " Video file formats are not supported by Loom"
+            icn = 'ERROR'
+        row.label(text=txt)
+        row.label(text="", icon=icn)
+
+        """
+        lines = note_text.split("\\n")
+        layout.row().label(text="Globals", icon="WORLD") # lines[0]
+        if len(lines) > 1:
+            for i in lines:
+                layout.row().label(text="" + i, icon="DOT" ) #¶ FONTPREVIEW
+            layout.separator(factor=0.3)
+        """
+        #layout.separator(factor=0.3)
+
 
 def draw_loom_project(self, context):
     """Append project dialog to app settings"""
@@ -6164,6 +6234,11 @@ def register():
             di.name = value
             di.creation_flag = True
 
+    """ Handler """
+    bpy.app.handlers.render_pre.append(loom_meta_note)
+    bpy.app.handlers.render_post.append(loom_meta_note_reset)  
+    bpy.app.handlers.render_cancel.append(loom_meta_note_reset) 
+
     """ Menus """
     bpy.types.TOPBAR_MT_render.append(draw_loom_render_menu)
     bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
@@ -6172,6 +6247,7 @@ def register():
     bpy.types.RENDER_PT_output.prepend(draw_loom_outputpath)
     bpy.types.RENDER_PT_output.append(draw_loom_version_number)
     bpy.types.RENDER_PT_output.append(draw_loom_compositor_paths)
+    bpy.types.RENDER_PT_stamp_note.prepend(draw_loom_metadata)
     bpy.types.DOPESHEET_HT_header.append(draw_loom_dopesheet)
     bpy.types.PROPERTIES_HT_header.append(draw_loom_render_presets)
     bpy.types.LOOM_PT_render_presets.append(draw_loom_preset_flags) 
@@ -6182,6 +6258,7 @@ def register():
 def unregister():
     bpy.types.DOPESHEET_HT_header.remove(draw_loom_dopesheet)
     bpy.types.RENDER_PT_output.remove(draw_loom_compositor_paths)
+    bpy.types.RENDER_PT_stamp_note.remove(draw_loom_metadata)
     bpy.types.RENDER_PT_output.remove(draw_loom_outputpath)
     bpy.types.RENDER_PT_output.remove(draw_loom_version_number)
     bpy.types.NLA_MT_marker.remove(draw_loom_marker_menu)
@@ -6200,6 +6277,10 @@ def unregister():
     for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
+
+    bpy.app.handlers.render_pre.remove(loom_meta_note)
+    bpy.app.handlers.render_post.remove(loom_meta_note_reset)
+    bpy.app.handlers.render_cancel.remove(loom_meta_note_reset)
 
     del bpy.types.Scene.loom
     
