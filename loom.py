@@ -4732,6 +4732,21 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
         name="Confirm when done",
         description="Confirm when done",
         default=True)
+    
+    def environment_variables(self):
+        """Return a dictionary of Blender-related environment variables that are set."""
+        blender_envs = (
+            'OCIO',
+            'BLENDER_USER_SCRIPTS',
+            'BLENDER_SYSTEM_SCRIPTS',
+            'BLENDER_USER_CONFIG',
+            'BLENDER_SYSTEM_CONFIG',
+            'BLENDER_USER_DATAFILES',
+            'BLENDER_SYSTEM_DATAFILES',
+            'BLENDER_USER_RESOURCES',
+            'BLENDER_SYSTEM_RESOURCES'
+        )
+        return {var: os.environ[var] for var in blender_envs if var in os.environ}
 
     def single_bash_cmd(self, arg_list):
         #l = [i for s in arg_list for i in s]
@@ -4742,6 +4757,11 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
         try:
             fp = open(bat_path, "w")
             fp.write("@ECHO OFF\n") #fp.write('COLOR 7F\n')
+
+            envs = self.environment_variables()
+            for var, value in envs.items():
+                fp.write(f'set {var}={value}\n')
+
             if isinstance(bat_args[0], list):
                 bat_args = [[self.binary] + i if self.binary else i for i in bat_args]
                 # Double quotes and double percentage %%
@@ -4774,6 +4794,10 @@ class LOOM_OT_run_terminal(bpy.types.Operator):
             fp.write('#! /bin/sh\n')
             bl_bin = '"{}"'.format(self.binary) # if platform.startswith('darwin') else self.binary
             
+            envs = self.environment_variables()
+            for var, value in envs.items():
+                fp.write(f'export {var}="{value}"\n')
+
             if isinstance(bash_args[0], list):
                 bash_args = [[bl_bin] + i if self.binary else i for i in bash_args]
 
