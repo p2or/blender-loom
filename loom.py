@@ -1232,8 +1232,8 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
             user_error = True
         
         """ Scene validation """
-        if scn.render.use_sequencer and hasattr(scn, "sequencer"):
-            if scn.sequence_editor and len(scn.sequence_editor.sequences) and self.validate_sequencer(context):
+        if scn.render.use_sequencer and hasattr(scn.sequence_editor, "sequences"):  
+            if len(scn.sequence_editor.sequences) and self.validate_sequencer(context): 
                 if not user_input.isdigit():
                     self.report(
                         {'INFO'}, 
@@ -3984,14 +3984,15 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
         """ Scene validation in case the operator is called via console """
         if self.validate_scene:
-            if scn.sequence_editor and scn.render.use_sequencer and len(scn.sequence_editor.sequences):
-                if self.validate_sequencer(context):
-                    if len(self._frames) > 1 and not self.render_silent:
-                        self.report(
-                            {'INFO'}, 
-                            "Scene Strip(s) in 'Sequencer' detected: " 
-                            "Automatically switched to 'silent' rendering...")
-                        self.render_silent = True
+            if scn.render.use_sequencer and hasattr(scn.sequence_editor, "sequences"):  
+                if len(scn.sequence_editor.sequences) and self.validate_sequencer(context): 
+                    if self.validate_sequencer(context):
+                        if len(self._frames) > 1 and not self.render_silent:
+                            self.report(
+                                {'INFO'}, 
+                                "Scene Strip(s) in 'Sequencer' detected: " 
+                                "Automatically switched to 'silent' rendering...")
+                            self.render_silent = True
             else:
                 if scn.render.use_compositing and scn.use_nodes:
                     rlyr = self.validate_comp(context)
