@@ -3986,13 +3986,12 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         if self.validate_scene:
             if scn.render.use_sequencer and hasattr(scn.sequence_editor, "sequences"):  
                 if len(scn.sequence_editor.sequences) and self.validate_sequencer(context): 
-                    if self.validate_sequencer(context):
-                        if len(self._frames) > 1 and not self.render_silent:
-                            self.report(
-                                {'INFO'}, 
-                                "Scene Strip(s) in 'Sequencer' detected: " 
-                                "Automatically switched to 'silent' rendering...")
-                            self.render_silent = True
+                    if len(self._frames) > 1 and not self.render_silent:
+                        self.report(
+                            {'INFO'}, 
+                            "Scene Strip(s) in 'Sequencer' detected: " 
+                            "Automatically switched to 'silent' rendering...")
+                        self.render_silent = True
             else:
                 if scn.render.use_compositing and scn.use_nodes:
                     rlyr = self.validate_comp(context)
