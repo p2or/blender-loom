@@ -1426,7 +1426,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
                         ctrl_points.add(key.co.x)
         return sorted(ctrl_points)
 
-    def keyframes_from_channel(self, action):
+    def keyframes_from_channel(self, context, action):
         """ Returns selected keys based on the action in the action editor """
         ctrl_points = set()
         for channel in action.fcurves:
