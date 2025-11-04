@@ -6276,7 +6276,7 @@ def register():
     bpy.types.LOOM_PT_render_presets.append(draw_loom_preset_flags) 
     bpy.types.LOOM_PT_render_presets.prepend(draw_loom_preset_header)
     bpy.types.TOPBAR_MT_blender.append(draw_loom_project)
-    if hasattr(bpy.types, 'TIME_MT_marker'):
+    if bpy.app.version < (5, 0, 0):
         bpy.types.TIME_MT_marker.append(draw_loom_marker_menu)
 
 def unregister():
@@ -6293,7 +6293,7 @@ def unregister():
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_header)
     bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
     
-    if hasattr(bpy.types, 'TIME_MT_marker'):
+    if bpy.app.version < (5, 0, 0):
         bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     
     from bpy.utils import unregister_class
