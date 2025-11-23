@@ -210,27 +210,42 @@ def render_version(self, context):
 
     """ Replace file output """
     if not scene.render.use_compositing or \
-        not scene.loom.output_sync_comp or \
-        not scene.node_tree:
+        not scene.loom.output_sync_comp:
+        return
+    
+    if bpy.app.version < (5, 0, 0):
+        comp_nodes = getattr(scene.node_tree, "nodes", None) #if scene.use_nodes else None
+    else:
+        comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+    
+    if not comp_nodes:
         return
 
-    output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
-    for out_node in output_nodes:
-        """ Set base path only """
-        if "LAYER" in out_node.format.file_format:
+    for out_node in [n for n in comp_nodes if n.type=='OUTPUT_FILE']:
+
+        if bpy.app.version < (5, 0, 0):
             out_node.base_path = version_number(
                 out_node.base_path, 
                 scene.loom.output_render_version)
+            
+            if not "LAYER" in out_node.format.file_format:
+                for out_file in out_node.file_slots:
+                    out_file.path = version_number(
+                        out_file.path, 
+                        scene.loom.output_render_version)
         else:
-            """ Set the base path """
-            out_node.base_path = version_number(
-                out_node.base_path, 
+            out_node.directory = version_number(
+                out_node.directory, 
                 scene.loom.output_render_version)
-            """ Set all slots """
-            for out_file in out_node.file_slots:
-                out_file.path = version_number(
-                    out_file.path, 
-                    scene.loom.output_render_version)
+            out_node.file_name = version_number(
+                out_node.file_name,
+                scene.loom.output_render_version)
+            
+            if not "LAYER" in out_node.format.file_format:
+                for item in out_node.file_output_items:
+                    item.name = version_number(
+                        item.name,
+                        scene.loom.output_render_version)
     return None
 
 
@@ -240,6 +255,22 @@ def isevaluable(s):
         return True
     except:
         return False
+
+internal_tokens = {
+    "{blend_name}": "bpy.path.basename(bpy.data.filepath)[:-6]",
+    "{blend_dir}": "os.path.dirname(bpy.data.filepath)",
+    "{fps}": "bpy.context.scene.render.fps",
+    "{resolution_x}": (
+        "int(bpy.context.scene.render.resolution_x * "
+        "bpy.context.scene.render.resolution_percentage / 100)"
+    ),
+    "{resolution_y}": (
+        "int(bpy.context.scene.render.resolution_y * "
+        "bpy.context.scene.render.resolution_percentage / 100)"
+    ),
+    "{scene_name}": "bpy.context.scene.name",
+    "{camera_name}": "bpy.context.scene.camera.name"
+}
 
 def replace_globals(s, debug=False):
     """Replace string by given global entries"""
@@ -254,28 +285,54 @@ def replace_globals(s, debug=False):
                         s = s.replace(key, "NO-{}".format(key.replace("$", "")))
         else: 
             print (key, val, val.expr)
+
+    """Replace tokens as long they are not exposed to the API"""
+    if '{' in s and '}' in s:
+        for key, expr in internal_tokens.items():
+            s = s.replace(key, str(eval(expr)))
+    
     return s
 
 def user_globals(context):
     """Determine whether globals used in the scene"""
-    scn = context.scene
+    scene = context.scene
     vars = context.preferences.addons[__name__].preferences.global_variable_coll
-    if any(ext in scn.render.filepath for ext in vars.keys()):
+    if any(ext in scene.render.filepath for ext in vars.keys()) or \
+        any(token in scene.render.filepath for token in internal_tokens.keys()):
         return True
-    if scn.use_nodes and len(scn.node_tree.nodes) > 0:
-        tree = scn.node_tree
-        nodes = (n for n in tree.nodes if n.type=='OUTPUT_FILE')
-        for node in nodes:
-            if any(ext in node.base_path for ext in vars.keys()):
+    
+    if bpy.app.version < (5, 0, 0):
+        comp_nodes = getattr(scene.node_tree, "nodes", None) #if scene.use_nodes else None
+    else:
+        comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+    
+    if not comp_nodes:
+        return False
+    
+    for node in [n for n in comp_nodes if n.type=='OUTPUT_FILE']:
+        if bpy.app.version < (5, 0, 0):
+            if any(ext in node.base_path for ext in vars.keys()) or \
+                any(token in node.base_path for token in internal_tokens.keys()):
                 return True
             if "LAYER" in node.format.file_format:
                 for slot in node.layer_slots:
-                    if any(ext in slot.name for ext in vars.keys()):
+                    if any(ext in slot.name for ext in vars.keys()) or \
+                        any(token in slot.name for token in internal_tokens.keys()):
                         return True
             else:
                 for slot in node.file_slots:
-                     if any(ext in slot.path for ext in vars.keys()):
-                         return True
+                    if any(ext in slot.path for ext in vars.keys()) or \
+                        any(token in slot.path for token in internal_tokens.keys()):
+                        return True
+        else:
+            if any(ext in node.directory for ext in vars.keys()) or \
+                any(token in node.directory for token in internal_tokens.keys()):
+                return True
+            for slot in node.file_output_items:
+                if any(ext in slot.name for ext in vars.keys()) or \
+                    any(token in slot.name for token in internal_tokens.keys()):
+                    return True
+    
     return False
 
 
@@ -848,14 +905,16 @@ class LOOM_PG_preset_flags(bpy.types.PropertyGroup):
 
 class LOOM_PG_slots(bpy.types.PropertyGroup):
     # name: bpy.props.StringPropery()
-    orig: bpy.props.StringProperty()
-    repl: bpy.props.StringProperty()
+    orig_slot: bpy.props.StringProperty()
+    repl_slot: bpy.props.StringProperty()
 
 class LOOM_PG_paths(bpy.types.PropertyGroup):
     # name: bpy.props.StringPropery()
     id: bpy.props.IntProperty()
-    orig: bpy.props.StringProperty()
-    repl: bpy.props.StringProperty()
+    orig_base: bpy.props.StringProperty()
+    repl_base: bpy.props.StringProperty()
+    orig_filename: bpy.props.StringProperty()
+    repl_filename: bpy.props.StringProperty()
     slts: bpy.props.CollectionProperty(name="Slot Collection", type=LOOM_PG_slots)
 
 
@@ -1184,8 +1243,14 @@ class LOOM_OT_render_dialog(bpy.types.Operator):
         return True
     
     def validate_comp(self, context):
-        if context.scene.use_nodes:
-            for n in context.scene.node_tree.nodes:
+        scene = context.scene
+        if bpy.app.version < (5, 0, 0):
+            comp_nodes = getattr(scene.node_tree, "nodes", None) if scene.use_nodes else None
+        else:
+            comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+        
+        if comp_nodes:
+            for n in comp_nodes:
                 if n.type == 'R_LAYERS' and not n.scene.camera:
                     if not n.mute:
                         return n.scene.name
@@ -1597,7 +1662,6 @@ def codec_callback(scene, context):
         ('PRORES4444XQ', "Apple ProRes 4444 XQ", ""),
         ('DNXHD422-08-036', "Avid DNxHD 422 8-bit 36Mbit", ""),
         ('DNXHD422-08-145', "Avid DNxHD 422 8-bit 145Mbit", ""),
-        ('DNXHD422-08-145', "Avid DNxHD 422 8-bit 220Mbit", ""),
         ('DNXHD422-10-185', "Avid DNxHD 422 10-bit 185Mbit", ""),
         #('DNXHD422-10-440', "Avid DNxHD 422 10-bit 440Mbit", ""),
         #('DNXHD444-10-350', "Avid DNxHD 422 10-bit 440Mbit", ""),
@@ -3584,9 +3648,10 @@ class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        # space = context.space_data return space.type == 'NODE_EDITOR'
-        # all([hasattr(scene.node_tree, "nodes"), scene.render.use_compositing, scene.use_nodes])
-        return hasattr(context.scene.node_tree, "nodes")
+        if bpy.app.version < (5, 0, 0):
+            return hasattr(context.scene.node_tree, "nodes")
+        else:
+            return hasattr(context.scene.compositing_node_group, "nodes")
         
     def remove_version(self, fpath):
         match = re.search(r'(v\d+)', fpath)
@@ -3601,24 +3666,37 @@ class LOOM_OT_utils_node_cleanup(bpy.types.Operator):
             return fpath
     
     def execute(self, context):
-        scene = context.scene    
-        nodes = scene.node_tree.nodes
-        output_nodes = [n for n in nodes if n.type=='OUTPUT_FILE']
+        scene = context.scene
+        if bpy.app.version < (5, 0, 0):
+            comp_nodes = getattr(scene.node_tree, "nodes", None) #if scene.use_nodes else None
+        else:
+            comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
         
-        if not output_nodes:
+        if not comp_nodes:
             self.report({'INFO'}, "Nothing to operate on")
             return {'CANCELLED'}
-            
+        
+        output_nodes = [n for n in comp_nodes if n.type=='OUTPUT_FILE']
+        if not output_nodes:
+            self.report({'INFO'}, "No file output nodes to operate on")
+            return {'CANCELLED'}
+        
         for out_node in output_nodes:
-            if "LAYER" in out_node.format.file_format:
-                out_node.base_path = self.remove_version(out_node.base_path)
-                for layer in out_node.layer_slots:
-                    layer.name = self.remove_version(layer.name)
+            if bpy.app.version < (5, 0, 0):
+                if "LAYER" in out_node.format.file_format:
+                    out_node.base_path = self.remove_version(out_node.base_path)
+                    for layer in out_node.layer_slots:
+                        layer.name = self.remove_version(layer.name)
+                else:
+                    out_node.base_path = self.remove_version(out_node.base_path)
+                    for out_file in out_node.file_slots:
+                        out_file.path = self.remove_version(out_file.path)
             else:
-                out_node.base_path = self.remove_version(out_node.base_path)
-                for out_file in out_node.file_slots:
-                    out_file.path = self.remove_version(out_file.path)
-            
+                out_node.directory = self.remove_version(out_node.directory)
+                out_node.file_name = self.remove_version(out_node.file_name)
+                for item in out_node.file_output_items:
+                    item.name = self.remove_version(item.name)
+
             scene.loom.output_sync_comp=False
         return {'FINISHED'}
 
@@ -3854,16 +3932,29 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             return blend_name + "_"
 
     def out_nodes(self, scene):
-        tree = scene.node_tree
-        return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
+        if bpy.app.version < (5, 0, 0):
+            nodes = getattr(scene.node_tree, "nodes", None) #if scene.use_nodes else None
+        else:
+            nodes = getattr(scene.compositing_node_group, "nodes", None)
+        if not nodes:
+            return []
+        return [n for n in nodes if n.type=='OUTPUT_FILE']
 
     def reset_output_paths(self, scene):
         scene.render.filepath = self._output_path
         for k, v in self._output_nodes.items():
-            k.base_path = v["Base Path"]
-            if "File Slots" in v: # Reset Slots
-                for c, fs in enumerate(k.file_slots):
-                    fs.path = v["File Slots"][c]
+
+            if bpy.app.version < (5, 0, 0):
+                k.base_path = v["Base Path"]
+                if "File Slots" in v: # Reset Slots
+                    for c, fs in enumerate(k.file_slots):
+                        fs.path = v["File Slots"][c]
+            else:
+                k.directory = v["Base Path"]
+                k.file_name = v["Filename"]
+                if "File Slots" in v: # Reset Slots
+                    for c, fs in enumerate(k.file_output_items):
+                        fs.name = v["File Slots"][c]
 
     def frame_repath(self, scene, frame_number):
         ''' Set the frame, assamble main file and output node paths '''
@@ -3878,22 +3969,32 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
         scene.render.filepath = os.path.join(self._folder, ff)
                 
         for k, v in self._output_nodes.items():
+            
             if "File Slots" in v:
-                k.base_path = replace_globals(k.base_path)
-                for c, f in enumerate(k.file_slots):
-                    if self._subframe_flag:
-                        f.path = self.format_subframe(v["File Slots"][c], frame_number)
-                    else:
-                        #f.path = self.format_frame(v["File Slots"][c], frame_number)
-                        f.path = replace_globals(v["File Slots"][c])
-            else:
-                if self._subframe_flag:
-                    of = self.format_subframe(v["Filename"], frame_number)
+                if bpy.app.version < (5, 0, 0):
+                    for c, f in enumerate(k.file_slots):
+                        if self._subframe_flag:
+                            f.path = self.format_subframe(v["File Slots"][c], frame_number)
+                        else:
+                            f.path = replace_globals(v["File Slots"][c])
                 else:
-                    #of = self.format_frame(v["Filename"], frame_number)
-                    of = replace_globals(v["Filename"])
-                """ Final output node path assembly """
+                    for c, f in enumerate(k.file_output_items):
+                        if self._subframe_flag:
+                            f.name = self.format_subframe(v["File Slots"][c], frame_number)
+                        else:
+                            f.name = replace_globals(v["File Slots"][c])
+
+            """ Final output node path assembly """
+            if self._subframe_flag:
+                of = self.format_subframe(v["Filename"], frame_number)
+            else:
+                of = replace_globals(v["Filename"])
+            
+            if bpy.app.version < (5, 0, 0):
                 k.base_path = os.path.join(replace_globals(v["Folder"]), of)
+            else:
+                k.directory = replace_globals(k.directory)
+                k.file_name = of #replace_globals(k.file_name)
 
     def start_render(self, scene, frame, silent=False):
         rndr = scene.render
@@ -3916,8 +4017,14 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 self._rendered_frames.append(frame)
 
     def validate_comp(self, context):
-        if context.scene.use_nodes:
-            for n in context.scene.node_tree.nodes:
+        scene = context.scene
+        if bpy.app.version < (5, 0, 0):
+            comp_nodes = getattr(scene.node_tree, "nodes", None) if scene.use_nodes else None
+        else:
+            comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+        
+        if comp_nodes:
+            for n in comp_nodes:
                 if n.type == 'R_LAYERS' and not n.scene.camera:
                     if not n.mute:
                         return n.scene.name
@@ -4027,18 +4134,26 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
         """ Output node paths """
         for out_node in self.out_nodes(scn):
-            fd, fn = os.path.split(bpy.path.abspath(out_node.base_path))
+
+            if bpy.app.version < (5, 0, 0):
+                fd, fn = os.path.split(bpy.path.abspath(out_node.base_path))
+            else:
+                fd, fn = bpy.path.abspath(out_node.directory), out_node.file_name
+            
             self._output_nodes[out_node] = {
                 "Type": out_node.format.file_format,
                 "Extension": self.file_extension(out_node.format.file_format),
-                "Base Path": out_node.base_path,
+                "Base Path": out_node.base_path if bpy.app.version < (5, 0, 0) else out_node.directory,
                 "Folder": os.path.realpath(fd),
                 "Filename": fn}
 
             """ Single file slots in case """
             if not "LAYER" in out_node.format.file_format:
-                self._output_nodes[out_node].update({"File Slots": [s.path for s in out_node.file_slots]})
-                #"File Slots": {s.path : self.safe_filename(s.path) for s in out_node.file_slots}
+                if bpy.app.version < (5, 0, 0):
+                    slots = [s.path for s in out_node.file_slots]
+                else:
+                    slots = [s.name for s in out_node.file_output_items]
+                self._output_nodes[out_node].update({"File Slots": slots})
         
         """ Clear assigned frame numbers """
         self._skipped_frames.clear(), self._rendered_frames.clear()
@@ -5336,8 +5451,13 @@ class LOOM_OT_bake_globals(bpy.types.Operator):
             ('APPLY', "Apply Globals", "", "WORLD_DATA", 2)))
 
     def out_nodes(self, scene):
-        tree = scene.node_tree
-        return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
+        if bpy.app.version < (5, 0, 0):
+            comp_nodes = getattr(scene.node_tree, "nodes", None) #if scene.use_nodes else None
+        else:
+            comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+        if not comp_nodes:
+            return []
+        return [n for n in comp_nodes if n.type=='OUTPUT_FILE']
 
     def execute(self, context):
         scn = context.scene    
@@ -5345,38 +5465,17 @@ class LOOM_OT_bake_globals(bpy.types.Operator):
         glob_vars = prefs.global_variable_coll
         lum = scn.loom
 
-        '''
-        if any(ext in scn.render.filepath for ext in glob_vars.keys()):
-            scn.render.filepath = replace_globals(scn.render.filepath)
-        for node in self.out_nodes(scn):
-            node.base_path = replace_globals(node.base_path)
-            if "LAYER" in node.format.file_format:
-                for slot in node.layer_slots:
-                    slot.name = replace_globals(slot.name)
-            else:
-                for slot in node.file_slots:
-                    slot.path = replace_globals(slot.path)
-        # DEBUG
-        for i in lum.path_collection:
-            print (30*"-")
-            print (i.name)
-            print (i.orig, i.repl)
-            for s in i.slts:
-                print (s.orig, s.repl)
-        '''
-
         if self.action == 'APPLY':
+
             """ Main output path """
             if any(ext in scn.render.filepath for ext in glob_vars.keys()):
                 item = lum.path_collection.get("Output Path")
                 if not item:
                     item = lum.path_collection.add()
-                item.name = "Output Path" #item.id = 
-                item.orig = scn.render.filepath
-                compiled_path = replace_globals(scn.render.filepath)
-                item.repl = compiled_path
-                # Set the regular file path 
-                scn.render.filepath = compiled_path
+                item.name = "Output Path"
+                item.orig_base = scn.render.filepath 
+                item.repl_base = replace_globals(scn.render.filepath)
+                scn.render.filepath = item.repl_base
 
             """ Output nodes """
             for node in self.out_nodes(scn):
@@ -5384,51 +5483,94 @@ class LOOM_OT_bake_globals(bpy.types.Operator):
                 if not item:
                     item = lum.path_collection.add()
                 item.name = node.name
-                item.orig = node.base_path
-                item.repl = replace_globals(node.base_path)
-                # Set the base path
-                if item.repl: node.base_path = item.repl
+                item.orig_base = node.base_path if bpy.app.version < (5, 0, 0) else node.directory
+                item.repl_base = replace_globals(item.orig_base)
+                item.orig_filename = "" if bpy.app.version < (5, 0, 0) else node.file_name
+                item.repl_filename = replace_globals(item.orig_filename)
 
-                if "LAYER" in node.format.file_format:
-                    for slot in node.layer_slots:
+                if bpy.app.version < (5, 0, 0):
+                    # Set the base path
+                    if item.repl_base:
+                        node.base_path = item.repl_base
+
+                    if "LAYER" in node.format.file_format:
+                        for slot in node.layer_slots:
+                            slt = item.slts.get(slot.name)
+                            if not slt:
+                                slt = item.slts.add()
+                            slt.name = slot.name
+                            slt.orig_slot = slot.name
+                            slt.repl_slot = replace_globals(slot.name)
+                            
+                            if slt.repl_slot: # Set the name of the layer slot
+                                slot.name = slt.repl_slot
+                            
+                    else:
+                        for slot in node.file_slots:
+                            slt = item.slts.get(slot.path)
+                            if not slt:
+                                slt = item.slts.add()
+                            slt.name = slot.path
+                            slt.orig_slot = slot.path
+                            slt.repl_slot = replace_globals(slot.path)
+                            
+                            if slt.repl_slot: # Set the name of the path slot
+                                slot.path = slt.repl
+                
+                else:
+                    # Set the directory and filename
+                    if item.repl_base: 
+                        node.directory = item.repl_base
+                    if item.repl_filename:
+                        node.file_name = item.repl_filename
+
+                    # Set the output items
+                    for slot in node.file_output_items:
                         slt = item.slts.get(slot.name)
                         if not slt:
                             slt = item.slts.add()
                         slt.name = slot.name
-                        slt.orig = slot.name
-                        slt.repl = replace_globals(slot.name)
-                        # Set the slot name
-                        if slt.repl: slot.name = slt.repl
-                else:
-                    for slot in node.file_slots:
-                        slt = item.slts.get(slot.path)
-                        if not slt:
-                            slt = item.slts.add()
-                        slt.name = slot.path
-                        slt.orig = slot.path
-                        slt.repl = replace_globals(slot.path)
-                        if slt.repl: slot.path = slt.repl
+                        slt.orig_slot = slot.name
+                        slt.repl_slot = replace_globals(slot.name)
+                        
+                        if slt.repl_slot: # Set the name of the layer slot
+                            slot.name = slt.repl_slot
+
             self.report({'INFO'}, "Replaced all Globals")
         
         if self.action == 'RESET':
             for i in lum.path_collection:
                 if i.name == "Output Path":
-                    scn.render.filepath = i.orig
+                    scn.render.filepath = i.orig_base
                 else:
-                    node = scn.node_tree.nodes.get(i.name)
+                    if bpy.app.version < (5, 0, 0):
+                        node = scn.node_tree.nodes.get(i.name)
+                    else: 
+                        node = scn.compositing_node_group.nodes.get(i.name)
+                    
                     if node:
-                        node.base_path = i.orig
-                        if "LAYER" in node.format.file_format:
-                            for slot in node.layer_slots:
-                                for o in i.slts:
-                                    if o.repl == slot.name:
-                                        slot.name = o.orig
+                        if bpy.app.version < (5, 0, 0):
+                            node.base_path = i.orig_base
+                            if "LAYER" in node.format.file_format:
+                                for slot in node.layer_slots:
+                                    for o in i.slts:
+                                        if o.repl_slot == slot.name:
+                                            slot.name = o.orig_slot
+                            else:
+                                for slot in node.file_slots:
+                                    for o in i.slts:
+                                        if o.repl_slot == slot.path:
+                                            slot.path = o.orig_slot
                         else:
-                            for slot in node.file_slots:
+                            node.directory = i.orig_base
+                            node.file_name = i.orig_filename
+                            for slot in node.file_output_items:
                                 for o in i.slts:
-                                    if o.repl == slot.path:
-                                        slot.path = o.orig
+                                    if o.repl_slot == slot.name:
+                                        slot.name = o.orig_slot
+            
             self.report({'INFO'}, "Reset all Paths")
+
         return {'FINISHED'}
 
 
@@ -5466,8 +5608,13 @@ class LOOM_OT_output_paths(bpy.types.Operator):
         return os.path.join(basedir, filename)
 
     def out_nodes(self, scene):
-        tree = scene.node_tree
-        return [n for n in tree.nodes if n.type=='OUTPUT_FILE'] if tree else []
+        if bpy.app.version < (5, 0, 0):
+            comp_nodes = getattr(scene.node_tree, "nodes", None) #if scene.use_nodes else None
+        else:
+            comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+        if not comp_nodes:
+            return []
+        return [n for n in comp_nodes if n.type=='OUTPUT_FILE']
     
     def execute(self, context):
         scn = context.scene
@@ -5477,13 +5624,19 @@ class LOOM_OT_output_paths(bpy.types.Operator):
                 scn.render.filepath = self.convert_path(scn.render.filepath, relative=False)
             if self.comp_paths:
                 for node in self.out_nodes(scn):
-                    node.base_path = self.convert_path(node.base_path, relative=False)
+                    if bpy.app.version < (5, 0, 0):
+                        node.base_path = self.convert_path(node.base_path, relative=False)
+                    else:
+                        node.directory = self.convert_path(node.directory, relative=False)
         else:
             if self.out_path:
                 scn.render.filepath = self.convert_path(scn.render.filepath)
             if self.comp_paths:
                 for node in self.out_nodes(scn):
-                    node.base_path = self.convert_path(node.base_path)
+                    if bpy.app.version < (5, 0, 0):
+                        node.base_path = self.convert_path(node.base_path)
+                    else:
+                        node.directory = self.convert_path(node.directory)
 
         return {'FINISHED'}
     
@@ -5682,7 +5835,7 @@ class LOOM_OT_render_preset(AddPresetBase, bpy.types.Operator):
         if preset_flags.include_engine_settings:
             if scene.render.engine == 'CYCLES':
                 for prop in dir(scene.cycles):
-                    if not prop.startswith(ignore_attribs):
+                    if not prop.startswith(ignore_attribs + ('adaptive_compile_description',)):
                         preset_values.append("scene.cycles.{}".format(prop))
             
             elif bpy.context.scene.render.engine in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'):
@@ -5909,7 +6062,7 @@ def draw_loom_outputpath(self, context):
     
     original_paths = context.scene.loom.path_collection
     if globals_flag or context.scene.loom.path_collection:
-        if len(original_paths) and not original_paths[0].orig == context.scene.render.filepath:
+        if len(original_paths) and not original_paths[0].orig_base == context.scene.render.filepath:
             sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="RECOVER_LAST", text="").action='RESET'
         sub_row.operator(LOOM_OT_bake_globals.bl_idname, icon="WORLD_DATA", text="").action='APPLY'
         #sub_row.operator_enum(LOOM_OT_bake_globals.bl_idname, "action", icon_only=True)
@@ -5923,38 +6076,48 @@ def draw_loom_compositor_paths(self, context):
     if bpy.context.preferences.addons[__name__].preferences.output_extensions:
         return
     scene = context.scene
-    if all([hasattr(scene.node_tree, "nodes"), scene.render.use_compositing, scene.use_nodes]):
-        output_nodes = [n for n in scene.node_tree.nodes if n.type=='OUTPUT_FILE']
-        if len(output_nodes) > 0:
-            lum = scene.loom
-            layout = self.layout
-            layout.separator()
-            box = layout.box()
+    
+    if bpy.app.version < (5, 0, 0):
+        comp_nodes = getattr(scene.node_tree, "nodes", None) if scene.use_nodes else None
+    else:
+        comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+
+    if not comp_nodes:
+        return
+
+    output_nodes = [n for n in comp_nodes if n.type=='OUTPUT_FILE']
+    if len(output_nodes) > 0:
+        lum = scene.loom
+        layout = self.layout
+        layout.separator()
+        box = layout.box()
+        row = box.row()
+        row.label(text="Compositor Output Nodes", icon='NODETREE')
+        icon = 'MODIFIER' if lum.comp_image_settings else 'MODIFIER_DATA'
+        row.prop(lum, "comp_image_settings", icon=icon, text="", emboss=False)
+                
+        for o in output_nodes:
             row = box.row()
-            row.label(text="Compositor Output Nodes", icon='NODETREE')
-            icon = 'MODIFIER' if lum.comp_image_settings else 'MODIFIER_DATA'
-            row.prop(lum, "comp_image_settings", icon=icon, text="", emboss=False)
-                    
-            for o in output_nodes:
-                row = box.row()
-                i = "IMAGE_PLANE" if o.format.file_format == 'OPEN_EXR_MULTILAYER' else "RENDERLAYERS"
+            i = "IMAGE_PLANE" if o.format.file_format == 'OPEN_EXR_MULTILAYER' else "RENDERLAYERS"
+
+            if bpy.app.version < (5, 0, 0):
                 row.prop(o, "base_path", text="{}".format(o.name), icon=i)
-                '''
-                if not os.path.isdir(o.base_path):
-                    row.operator(LOOM_OT_utils_create_directory.bl_idname, 
-                        icon='ERROR', text="", emboss=False).directory = os.path.dirname(o.base_path)
-                '''
                 row.operator(LOOM_OT_open_folder.bl_idname, 
                     icon='DISK_DRIVE', text="", emboss=False).folder_path = o.base_path
+            else:
+                row.prop(o, "directory", text="{}".format(o.name), icon=i)
+                row.operator(LOOM_OT_open_folder.bl_idname, 
+                    icon='DISK_DRIVE', text="", emboss=False).folder_path = o.directory
+                #row = box.row().prop(o, "file_name", text="{}".format(o.name), icon=i)
 
-                if lum.comp_image_settings:
-                    col = box.column()
-                    col.template_image_settings(o.format, color_management=False)
-                    col.separator()
+            if lum.comp_image_settings:
+                col = box.column()
+                col.template_image_settings(o.format, color_management=False)
+                col.separator()
 
-            box.separator()
-            #box.row().operator(LOOM_OT_utils_node_cleanup.bl_idname)
-            layout.separator()
+        box.separator()
+        #box.row().operator(LOOM_OT_utils_node_cleanup.bl_idname)
+        layout.separator()
             
 
 def draw_loom_metadata(self, context):
@@ -6292,7 +6455,6 @@ def unregister():
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_flags)
     bpy.types.LOOM_PT_render_presets.remove(draw_loom_preset_header)
     bpy.types.TOPBAR_MT_blender.remove(draw_loom_project)
-    
     if bpy.app.version < (5, 0, 0):
         bpy.types.TIME_MT_marker.remove(draw_loom_marker_menu)
     
