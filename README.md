@@ -98,6 +98,7 @@ If [FFmpeg](https://www.ffmpeg.org/) is installed on your machine and set up pro
 
 Loom also includes some handy utilities that help in production e.g. display of the final *Output Path*, a list of all *File Output* nodes in the regular *Output Panel*, the creation of project folders and more.
 
+
 ### Render Version
 
 Once you add `v` and some arbitrary number to the *Output Path*, a new 'slider' appears in the *Output Area* which allows to change the actual version string on the fly.
@@ -107,7 +108,6 @@ Once you add `v` and some arbitrary number to the *Output Path*, a new 'slider' 
 -->
 
 <img width="700" alt="Render Version" src="https://user-images.githubusercontent.com/512368/180618398-cb566e95-53cd-4f37-ad1d-6aeed1b184d6.gif">
-
 
 If you'd like to remove all version strings in your *File Output* nodes, hit <kbd>F3</kbd> and type `Remove version str...` 
 
@@ -143,9 +143,14 @@ Loom allows to replace of all occurrences of any 'global variable' defined in th
 - Defaults for demo purposes are `$BLEND`, `$F4`, `$SCENE`, `$CAMERA`, `$LENS`, `$MARKER`, `$COLL` etc.
 - To customize the provided time variables for e.g. dailies, see the official documentation on [`strftime()`](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) for all options.
 
-
-
 <!-- <img width="736" alt="Globals" src="https://user-images.githubusercontent.com/512368/180612932-93a1882c-06f3-4016-a2f7-13fa61c78dce.png"> -->
+
+### Render Flipbook <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F10</kbd>
+
+Using this dialog allows to [render the viewport](https://docs.blender.org/manual/en/latest/editors/3dview/viewport_render.html#viewport-render) based on the given frames, frame range(s), or subframes without manipulating the *Timeline* similar to _View > Render Viewport Animation_. Since rendering the viewport is quite fast, this can be useful for layout purposes, previewing subframes as well as utilizing the [real-time compositor](https://docs.blender.org/manual/en/latest/compositing/realtime_compositor.html).
+
+<img width="700" alt="Render flipbook dialog" src="https://github.com/p2or/blender-loom/assets/512368/5c02a537-343a-4240-b5bf-6732fc9b9b86">
+
 
 ### Render Presets
 
@@ -162,13 +167,17 @@ If a preset exists, a new dropdown will appear in the 'Image Sequence Dialog' wh
 
 <img width="700" alt="rndr_presets_dropdown" src="https://user-images.githubusercontent.com/512368/212472717-63c19b49-4e6d-4898-ba16-33777a397105.png">
 
-
-
 ### Markers
 
 Loom adds three new operators to the *Marker* menu of the *Timeline (Timeline > Markers)*. You can **generate markers based on the selected cameras** in the viewport, **unbind the markers** from the cameras or just **batch rename** them using a custom name or *Globals* that are defined in the *Addon Preferences*.
 
 <img width="700" alt="Batch rename markers" src="https://user-images.githubusercontent.com/512368/180614748-98ba2f5f-cb67-4c88-9714-5b63f1d09684.png">
+
+### Metadata Variables
+
+All predefined variables in the *Addon Preferences* e.g. `$CAMERA`, `$F4` or `$LENS` can be used in the _Note_ field of the _Metadata_ panel for previs. In order to format the text and make it easier to read, line breaks (`\n`) and spaces are supported as well.
+
+<img width="700" alt="Metadata Variables" src="https://github.com/user-attachments/assets/8c231274-552b-4f9e-91ba-caa116507c9c" />
 
 ### Rename File Sequence <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F2</kbd>
 
@@ -181,6 +190,7 @@ Using this dialog allows to rename any arbitrary image or file sequence on disk.
 Using this dialog allows to create all relevant main folders for the current project and automatically sets the *Output Path* to the render folder.
 
 <img width="700" alt="Project Setup" src="https://user-images.githubusercontent.com/512368/180613021-0046c4b8-4ef6-4a10-bcef-f4a87660421e.png">
+
 
 <!-- 
 ### Shot Range
