@@ -860,24 +860,17 @@ def render_preset_callback(self, context):
 def render_scene_callback(self, context):
     items = [('NONE', "Active Scene", "Active Scene", 'SEQ_PREVIEW', 0)]
     if os.path.exists(self.path) and context.scene.loom.override_batch_render_settings:
-        scene_list = None
-        with bpy.data.libraries.load(self.path) as (data_from, data_to):
-            scene_list = data_from.scenes
-        if len(scene_list) > 1:
-            for i, s in enumerate(scene_list):
-                items.append((s, "{}".format(s), s, 'OUTLINER_OB_IMAGE', i+1)) #FILE_IMAGE
+        if len(self.scenes) > 1:
+            for i, s in enumerate(self.scenes):
+                items.append((s.name, s.name, s.name, 'OUTLINER_OB_IMAGE', i+1))
     return items
 
 def render_camera_callback(self, context):
     items = [('NONE', "Active Camera", "Active Camera", 'CAMERA_DATA', 0)]
     if os.path.exists(self.path) and context.scene.loom.override_batch_render_settings:
-        camera_list = None
-        with bpy.data.libraries.load(self.path) as (data_from, data_to):
-            camera_list = data_from.cameras
-        if len(camera_list) > 1:
-            for i, s in enumerate(camera_list):#for s in camera_list:
-                items.append((s, "{}".format(s), s, 'OUTLINER_OB_CAMERA', i+1))
-
+        if len(self.cameras) > 1:
+            for i, c in enumerate(self.cameras):
+                items.append((c.name, c.name, c.name, 'OUTLINER_OB_CAMERA', i+1))
     return items
 
 class LOOM_PG_batch_render(bpy.types.PropertyGroup):
@@ -890,6 +883,8 @@ class LOOM_PG_batch_render(bpy.types.PropertyGroup):
     scene: bpy.props.StringProperty()
     frames: bpy.props.StringProperty(name="Frames")
     encode_flag: bpy.props.BoolProperty(name="Encode Sequence", default=False)
+    scenes: bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
+    cameras: bpy.props.CollectionProperty(type=bpy.types.PropertyGroup)
     scene_selection: bpy.props.EnumProperty(name="Scene", items=render_scene_callback)
     camera_selection: bpy.props.EnumProperty(name="Camera", items=render_camera_callback)
     preset_selection: bpy.props.EnumProperty(name="Preset", items=render_preset_callback)
@@ -2151,6 +2146,21 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
                 if match: file_sequence[int(match.group(1))] = os.path.join(basedir, f.name)
         return file_sequence
 
+    def blendfile_info(self, path):
+        if os.path.samefile(os.path.abspath(path), os.path.abspath(bpy.data.filepath)):
+            return {
+                'scenes': [scene.name for scene in bpy.data.scenes],
+                'cameras': [cam.name for cam in bpy.data.cameras]}
+        else:
+            try:
+                with bpy.data.libraries.load(path) as (data_from, data_to):
+                    return {
+                        'scenes': list(data_from.scenes),
+                        'cameras': list(data_from.cameras)}
+            except Exception as e:
+                print(f"Could not read blend file {path}: {e}")
+                return {'scenes': [], 'cameras': []}
+            
     @classmethod
     def poll(cls, context):
         return bpy.data.is_saved
@@ -2233,6 +2243,16 @@ class LOOM_OT_batch_snapshot(bpy.types.Operator):
                     item.frames = "{}-{}".format(item.frame_start, item.frame_end)
                     lum.batch_render_idx = len(lum.batch_render_coll)-1
 
+                    # Populate blendfile info
+                    #item.mtime = int(os.path.getmtime(path_to_file))
+                    info = self.blendfile_info(path_to_file) # item.scenes.clear()
+                    for s in info['scenes']:
+                        s_item = item.scenes.add()
+                        s_item.name = s
+                    for c in info['cameras']:
+                        c_item = item.cameras.add()
+                        c_item.name = c
+                    
         return {'FINISHED'}
 
     def invoke(self, context, event):
@@ -2296,6 +2316,21 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
     
+    def blendfile_info(self, path):
+        if os.path.samefile(os.path.abspath(path), os.path.abspath(bpy.data.filepath)):
+            return {
+                'scenes': [scene.name for scene in bpy.data.scenes],
+                'cameras': [cam.name for cam in bpy.data.cameras]}
+        else:
+            try:
+                with bpy.data.libraries.load(path) as (data_from, data_to):
+                    return {
+                        'scenes': list(data_from.scenes),
+                        'cameras': list(data_from.cameras)}
+            except Exception as e:
+                print(f"Could not read blend file {path}: {e}")
+                return {'scenes': [], 'cameras': []}
+        
     def execute(self, context):
         scn = context.scene
         lum = scn.loom
@@ -2324,6 +2359,16 @@ class LOOM_OT_batch_selected_blends(bpy.types.Operator, ImportHelper):
                 item.frame_end = end
                 item.scene = sc
                 item.frames = "{}-{}".format(item.frame_start, item.frame_end)
+
+                # Populate blendfile info
+                #item.mtime = int(os.path.getmtime(path_to_file))
+                info = self.blendfile_info(path_to_file) # item.scenes.clear()
+                for s in info['scenes']:
+                    s_item = item.scenes.add()
+                    s_item.name = s
+                for c in info['cameras']:
+                    c_item = item.cameras.add()
+                    c_item.name = c
         
         #self.report({'INFO'}, "Skipped {}, no valid .blend".format(", ".join(valid_files)))
         if invalid_files:
@@ -2373,7 +2418,22 @@ class LOOM_OT_scan_blends(bpy.types.Operator, ImportHelper):
         win.cursor_warp(x=self.cursor_pos[0], y=self.cursor_pos[1]+100) # re-invoke the dialog
         bpy.ops.loom.batch_render_dialog('INVOKE_DEFAULT')
         #bpy.context.window.screen = bpy.context.window.screen
-        
+    
+    def blendfile_info(self, path):
+        if os.path.samefile(os.path.abspath(path), os.path.abspath(bpy.data.filepath)):
+            return {
+                'scenes': [scene.name for scene in bpy.data.scenes],
+                'cameras': [cam.name for cam in bpy.data.cameras]}
+        else:
+            try:
+                with bpy.data.libraries.load(path) as (data_from, data_to):
+                    return {
+                        'scenes': list(data_from.scenes),
+                        'cameras': list(data_from.cameras)}
+            except Exception as e:
+                print(f"Could not read blend file {path}: {e}")
+                return {'scenes': [], 'cameras': []}
+            
     @classmethod
     def poll(cls, context):
         return True
@@ -2410,7 +2470,17 @@ class LOOM_OT_scan_blends(bpy.types.Operator, ImportHelper):
                 item.frame_end = end
                 item.scene = sc
                 item.frames = "{}-{}".format(item.frame_start, item.frame_end)
-
+                
+                # Populate blendfile info
+                #item.mtime = int(os.path.getmtime(path_to_file))
+                info = self.blendfile_info(path_to_file) # item.scenes.clear()
+                for s in info['scenes']:
+                    s_item = item.scenes.add()
+                    s_item.name = s
+                for c in info['cameras']:
+                    c_item = item.cameras.add()
+                    c_item.name = c
+                
         if valid_files:
              self.report({'INFO'}, "Added {} to the list".format(", ".join(valid_files)))
         if invalid_files:
