@@ -4070,18 +4070,28 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
 
     def reset_output_paths(self, scene):
         scene.render.filepath = self._output_path
-        for k, v in self._output_nodes.items():
+
+        if bpy.app.version < (5, 0, 0):
+            comp_nodes = getattr(scene.node_tree, "nodes", None)
+        else:
+            comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+        if not comp_nodes:
+            return
+
+        for node_name, v in list(self._output_nodes.items()):
+            node = comp_nodes.get(node_name) if node_name else None
+            if not node: continue
 
             if bpy.app.version < (5, 0, 0):
-                k.base_path = v["Base Path"]
-                if "File Slots" in v: # Reset Slots
-                    for c, fs in enumerate(k.file_slots):
+                node.base_path = v["Base Path"]
+                if "File Slots" in v:
+                    for c, fs in enumerate(node.file_slots):
                         fs.path = v["File Slots"][c]
             else:
-                k.directory = v["Base Path"]
-                k.file_name = v["Filename"]
-                if "File Slots" in v: # Reset Slots
-                    for c, fs in enumerate(k.file_output_items):
+                node.directory = v["Base Path"]
+                node.file_name = v["Filename"]
+                if "File Slots" in v:
+                    for c, fs in enumerate(node.file_output_items):
                         fs.name = v["File Slots"][c]
 
     def frame_repath(self, scene, frame_number):
@@ -4093,36 +4103,43 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
             scene.frame_set(frame_number)
             ff = self.format_frame(self._filename, frame_number, self._extension)
         
-        """ Final main path assembly """
         scene.render.filepath = os.path.join(self._folder, ff)
-                
-        for k, v in self._output_nodes.items():
-            
+        
+        if bpy.app.version < (5, 0, 0):
+            comp_nodes = getattr(scene.node_tree, "nodes", None)
+        else:
+            comp_nodes = getattr(scene.compositing_node_group, "nodes", None)
+        if not comp_nodes:
+            return
+
+        for node_name, v in self._output_nodes.items():
+            node = comp_nodes.get(node_name)
+            if not node: continue
+
             if "File Slots" in v:
                 if bpy.app.version < (5, 0, 0):
-                    for c, f in enumerate(k.file_slots):
+                    for c, f in enumerate(node.file_slots):
                         if self._subframe_flag:
                             f.path = self.format_subframe(v["File Slots"][c], frame_number)
                         else:
                             f.path = replace_globals(v["File Slots"][c])
                 else:
-                    for c, f in enumerate(k.file_output_items):
+                    for c, f in enumerate(node.file_output_items):
                         if self._subframe_flag:
                             f.name = self.format_subframe(v["File Slots"][c], frame_number)
                         else:
                             f.name = replace_globals(v["File Slots"][c])
 
-            """ Final output node path assembly """
             if self._subframe_flag:
                 of = self.format_subframe(v["Filename"], frame_number)
             else:
                 of = replace_globals(v["Filename"])
-            
+
             if bpy.app.version < (5, 0, 0):
-                k.base_path = os.path.join(replace_globals(v["Folder"]), of)
+                node.base_path = os.path.join(replace_globals(v["Folder"]), of)
             else:
-                k.directory = replace_globals(k.directory)
-                k.file_name = of #replace_globals(k.file_name)
+                node.directory = replace_globals(node.directory)
+                node.file_name = of  # replace_globals(node.file_name)
 
     def start_render(self, scene, frame, silent=False):
         rndr = scene.render
@@ -4267,8 +4284,8 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                 fd, fn = os.path.split(bpy.path.abspath(out_node.base_path))
             else:
                 fd, fn = bpy.path.abspath(out_node.directory), out_node.file_name
-            
-            self._output_nodes[out_node] = {
+
+            self._output_nodes[out_node.name] = {
                 "Type": out_node.format.file_format,
                 "Extension": self.file_extension(out_node.format.file_format),
                 "Base Path": out_node.base_path if bpy.app.version < (5, 0, 0) else out_node.directory,
@@ -4281,7 +4298,7 @@ class LOOM_OT_render_image_sequence(bpy.types.Operator):
                     slots = [s.path for s in out_node.file_slots]
                 else:
                     slots = [s.name for s in out_node.file_output_items]
-                self._output_nodes[out_node].update({"File Slots": slots})
+                self._output_nodes[out_node.name].update({"File Slots": slots})
         
         """ Clear assigned frame numbers """
         self._skipped_frames.clear(), self._rendered_frames.clear()
@@ -6307,33 +6324,34 @@ class LOOM_PT_dopesheet(bpy.types.Panel):
         row = layout.row()
         #row.operator(LOOM_OT_open_folder.bl_idname, icon="RENDER_STILL", text="", emboss=False).folder_path = "//"
         row.label(text="Loom", icon="RENDER_STILL")
-        vp_icon = 'RESTRICT_VIEW_OFF' if lum.flipbook_flag else 'RESTRICT_VIEW_ON' #SHADING_RENDERED
-        row.prop(lum, "flipbook_flag", icon=vp_icon, text="", emboss=False) #
+        switch_icon = 'RESTRICT_VIEW_OFF' if lum.flipbook_flag else 'RESTRICT_VIEW_ON' #SHADING_RENDERED
+        row.prop(lum, "flipbook_flag", icon=switch_icon, text="", emboss=False)
         row = layout.row()
 
         col = layout.column() #col.label(text="Loom", icon='RENDER_STILL') #col = layout.column()
         row = col.row(align=True)
         row.prop(lum, "scene_selection", icon="SCENE_DATA", text="") #icon='SHAPEKEY_DATA', 
-        ka_op = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, text="Render Selected Keyframes")
-        ka_op.limit_to_object_selection = lum.scene_selection
-        ka_op.flipbook_dialog = lum.flipbook_flag
+        kdlg = row.operator(LOOM_OT_selected_keys_dialog.bl_idname, text="Render Selected Keyframes")
+        kdlg.limit_to_object_selection = lum.scene_selection
+        kdlg.flipbook_dialog = lum.flipbook_flag
         #row.prop(lum, "scene_range", icon="CON_ACTION", text="")
-        #ka_op.limit_to_scene_frames = lum.scene_range
+        #kdlg.limit_to_scene_frames = lum.scene_range
         col.separator(factor=0.05) 
         row = col.row(align=True)
         row.prop(lum, "all_markers_flag", icon="TEMP", text="") #"TIME"
-        ma_txt = "Render All Markers" if lum.all_markers_flag else "Render Active Markers"
-        ma_op = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=ma_txt) # icon='PMARKER_ACT',
-        ma_op.all_markers = lum.all_markers_flag #PMARKER_SEL
-        ma_op.flipbook_dialog = lum.flipbook_flag
+        mdlg_txt = "Render All Markers" if lum.all_markers_flag else "Render Active Markers"
+        mdlg = row.operator(LOOM_OT_selected_makers_dialog.bl_idname, text=mdlg_txt) # icon='PMARKER_ACT',
+        mdlg.all_markers = lum.all_markers_flag #PMARKER_SEL
+        mdlg.flipbook_dialog = lum.flipbook_flag
 
         col.separator(factor=1.5)
-        txt = "Render Flipbook Animation" if lum.flipbook_flag else "Render Image Sequence"
-        icon = 'RENDER_RESULT' if lum.flipbook_flag else 'SEQUENCE' # RENDER_RESULT, 'SEQ_PREVIEW'
-        di = col.operator(LOOM_OT_render_input_dialog.bl_idname, icon=icon, text=txt)
-        di.flipbook_dialog = lum.flipbook_flag
-        di.frame_input = "{}-{}".format(scn.frame_start, scn.frame_end)
-        di.operator_description = txt
+        rdlg_txt = "Render Flipbook Animation" if lum.flipbook_flag else "Render Image Sequence"
+        rdlg_icon = 'RENDER_RESULT' if lum.flipbook_flag else 'SEQUENCE' # RENDER_RESULT, 'SEQ_PREVIEW'
+        rdlg = col.operator(LOOM_OT_render_input_dialog.bl_idname, icon=rdlg_icon, text=rdlg_txt)
+        rdlg.flipbook_dialog = lum.flipbook_flag
+        frames = "{}-{}".format(scn.frame_start, scn.frame_end) if not lum.frame_input else lum.frame_input
+        rdlg.frame_input = frames
+        rdlg.operator_description = rdlg_txt
         col.separator(factor=0.5)
 
 def draw_loom_dopesheet(self, context):
