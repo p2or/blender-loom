@@ -1471,6 +1471,18 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         G=(list(x) for _,x in groupby(frames, lambda x,c=count(): next(c)-x))
         return ",".join("-".join(map(str,(g[0],g[-1])[:len(g)])) for g in G)
 
+    def fcurves_from_action(self, action):
+        if bpy.app.version < (5, 0, 0):
+            return action.fcurves
+        fcurves = []
+        for layer in action.layers: 
+             # for strip in getattr(layer, "strips", []):
+            for strip in layer.strips:
+                for slot in action.slots:
+                    channel_bag = strip.channelbag(slot)
+                    fcurves.extend(channel_bag.fcurves)
+        return fcurves
+
     def keyframes_from_actions(self, context, object_selection=False, keyframe_selection=True):
         """ Returns either selected keys by object selection or all keys """
         actions = bpy.data.actions
@@ -1478,11 +1490,12 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
             obj_actions = [i.animation_data.action for i in context.selected_objects if i.animation_data]
             if obj_actions:
                 actions = obj_actions
+        
         # There is a select flag for the handles:
         # key.select_left_handle & key.select_right_handle
         ctrl_points = set()
         for action in actions:
-            for channel in action.fcurves: #if channel.select:
+            for channel in self.fcurves_from_action(action):
                 for key in channel.keyframe_points:
                     if keyframe_selection:
                         if key.select_control_point:
@@ -1494,7 +1507,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
     def keyframes_from_channel(self, context, action):
         """ Returns selected keys based on the action in the action editor """
         ctrl_points = set()
-        for channel in action.fcurves:
+        for channel in self.fcurves_from_action(action):
             for key in channel.keyframe_points:
                 if key.select_control_point:
                     ctrl_points.add(key.co.x)
@@ -1512,7 +1525,7 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
         """ Returns all keys of selected channels in dopesheet """
         ctrl_points = set()
         for action in bpy.data.actions:
-            for channel in action.fcurves:
+            for channel in self.fcurves_from_action(action):
                 if channel.select: #print(action, channel.group)
                     for key in channel.keyframe_points:
                         ctrl_points.add(key.co.x)
@@ -1557,7 +1570,11 @@ class LOOM_OT_selected_keys_dialog(bpy.types.Operator):
                 selected_keys = self.selected_gpencil_frames(context)
             
             elif mode == 'ACTION':
-                selected_keys = self.keyframes_from_channel(context, space.action)
+                # https://developer.blender.org/docs/release_notes/5.0/python_api/#animation-rigging
+                if bpy.app.version < (5, 0, 0):
+                    selected_keys = self.keyframes_from_channel(context, space.action)
+                else:
+                    selected_keys = self.keyframes_from_channel(context, context.active_action)
 
             elif mode == 'MASK':
                 self.report({'ERROR'}, "Not implemented.")
