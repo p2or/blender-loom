@@ -3182,7 +3182,7 @@ class LOOM_OT_load_image_sequence(bpy.types.Operator, ImportHelper):
     def bound_frame(self, frame_path, frame_iter):
         folder, filename = os.path.split(frame_path)
         digits = self.number_suffix(filename)
-        frame = re.sub('\d(?!\d)', lambda x: str(int(x.group(0)) + frame_iter), digits)
+        frame = re.sub(r'\d(?!\d)', lambda x: str(int(x.group(0)) + frame_iter), digits)
         return os.path.exists(os.path.join(folder, frame.join(filename.rsplit(digits))))
 
     def is_sequence(self, filepath):
@@ -4595,7 +4595,7 @@ class LOOM_OT_playblast(bpy.types.Operator):
     _image_sequence = {}
 
     def is_sequence(self, filepath):
-        next_frame = re.sub('\d(?!\d)', lambda x: str(int(x.group(0)) + 1), filepath)
+        next_frame = re.sub(r'\d(?!\d)', lambda x: str(int(x.group(0)) + 1), filepath)
         return True if os.path.exists(next_frame) else False
 
     def number_suffix(self, filename):
@@ -6021,7 +6021,7 @@ def draw_loom_marker_menu(self, context):
 
 def draw_loom_version_number(self, context):
     """Append Version Number Slider to the Output Area"""
-    if re.search("v\d+", context.scene.render.filepath) is not None:
+    if re.search(r"v\d+", context.scene.render.filepath) is not None:
         glob_vars = context.preferences.addons[__name__].preferences.global_variable_coll
         output_folder, file_name = os.path.split(bpy.path.abspath(context.scene.render.filepath))
         if any(ext in output_folder for ext in glob_vars.keys()):
